@@ -1,5 +1,24 @@
 {
-  "math_calculator": "def calculate(expr): return str(eval(expr))",
-  "extract_webpage_title": "```python\nimport requests\nfrom bs4 import BeautifulSoup\n\ndef extract_webpage_title(url):\n    try:\n        response = requests.get(url, timeout=5)\n        response.raise_for_status()\n        soup = BeautifulSoup(response.text, 'html.parser')\n        title = soup.title.string if soup.title else \"No title found\"\n        return title\n    except requests.exceptions.RequestException as e:\n        return f\"Error fetching URL: {str(e)}\"\n    except Exception as e:\n        return f\"An unexpected error occurred: {str(e)}\"\n```",
-  "count_pdf_pages": "```python\nimport PyPDF2\n\ndef count_pdf_pages(file_path):\n    try:\n        with open(file_path, 'rb') as file:\n            reader = PyPDF2.PdfReader(file)\n            return str(len(reader.pages))\n    except FileNotFoundError:\n        return \"Error: File not found.\"\n    except PyPDF2.PdfReadError:\n        return \"Error: Could not read PDF file.\"\n    except Exception as e:\n        return f\"Error: {str(e)}\"\n```"
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "math_calculator",
+        "description": "执行数学表达式计算",
+        "code": "def math_calculator(expression: str) -> str:\n    allowed_chars = set('0123456789+-*/(). ')\n    if not all(c in allowed_chars for c in expression):\n        return \"❌ 表达式包含非法字符\"\n    try:\n        return str(eval(expression))\n    except:\n        return \"❌ 计算错误",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "数学表达式"
+            }
+          },
+          "required": [
+            "expression"
+          ]
+        }
+      }
+    }
+  ]
 }

@@ -1,0 +1,19 @@
+{
+  "tools": [
+    {
+      "name": "math_calculator",
+      "description": "执行数学表达式计算",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "数学表达式，如3+5*2"
+          }
+        },
+        "required": ["expression"]
+      },
+      "code": "def calculate(expression):\n    return str(eval(expression))"
+    }
+  ]
+}
