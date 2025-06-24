@@ -1,0 +1,5 @@
+{
+  "math_calculator": "def calculate(expr): return str(eval(expr))",
+  "extract_webpage_title": "```python\nimport requests\nfrom bs4 import BeautifulSoup\n\ndef extract_webpage_title(url):\n    try:\n        response = requests.get(url, timeout=5)\n        response.raise_for_status()\n        soup = BeautifulSoup(response.text, 'html.parser')\n        title = soup.title.string if soup.title else \"No title found\"\n        return title\n    except requests.exceptions.RequestException as e:\n        return f\"Error fetching URL: {str(e)}\"\n    except Exception as e:\n        return f\"An unexpected error occurred: {str(e)}\"\n```",
+  "count_pdf_pages": "```python\nimport PyPDF2\n\ndef count_pdf_pages(file_path):\n    try:\n        with open(file_path, 'rb') as file:\n            reader = PyPDF2.PdfReader(file)\n            return str(len(reader.pages))\n    except FileNotFoundError:\n        return \"Error: File not found.\"\n    except PyPDF2.PdfReadError:\n        return \"Error: Could not read PDF file.\"\n    except Exception as e:\n        return f\"Error: {str(e)}\"\n```"
+}
