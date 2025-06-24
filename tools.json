@@ -4,14 +4,12 @@
       "type": "function",
       "function": {
         "name": "math_calculator",
-        "description": "执行数学表达式计算",
-        "code": "def math_calculator(expression: str) -> str:\n    allowed_chars = set('0123456789+-*/(). ')\n    if not all(c in allowed_chars for c in expression):\n        return \"❌ 表达式包含非法字符\"\n    try:\n        return str(eval(expression))\n    except:\n        return \"❌ 计算错误",
+        "description": "计算数学表达式",
         "parameters": {
           "type": "object",
           "properties": {
             "expression": {
-              "type": "string",
-              "description": "数学表达式"
+              "type": "string"
             }
           },
           "required": [

@@ -10,5 +10,5 @@ client = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"),
 agent = ManagerAgent(client)
 
 # 处理任务（会自动选择或生成工具）
-print(agent.process_task("计算3+5*2")) 
+print(agent.process_task("计算48+5*0.1")) 
 print(agent.process_task("输出 https://xiaoce.fun 的标题")) 

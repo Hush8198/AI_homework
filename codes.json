@@ -1,0 +1,3 @@
+{
+  "math_calculator": "def execute_math_calculator(expression: str) -> str:\n    try:\n        allowed_chars = set('0123456789+-*/(). ')\n        if not all(c in allowed_chars for c in expression):\n            return \"❌ 表达式包含非法字符\"\n        return str(eval(expression))\n    except Exception as e:\n        return f\"❌ 计算错误: {str(e)}\"\n"
+}

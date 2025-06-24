@@ -15,28 +15,51 @@ def client_maker(model_name="deepseek-chat"):
 
 def direct_response(clients, messages, blog_file, tools, temperature):
     model_name, client = clients
-    if tools:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=messages,
-            tools=tools
-        )
-    else:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=messages
-        )
+    response = client.chat.completions.create(
+        model=model_name,
+        messages=messages,
+        tools=tools if tools else None,
+        tool_choice="auto" if tools else None,
+        temperature=temperature
+    )
     full_response = response.choices[0].message
-    # blog_file.write(f'<assistant><direct mode>({model_name}): ' + full_response + '\n')
-    print(full_response)
-    return full_response
+    
+    # 添加日志记录功能
+    if hasattr(full_response, 'content') and full_response.content:
+        blog_file.write(f'<assistant><direct mode>({model_name}): {full_response.content}\n')
+    elif hasattr(full_response, 'tool_calls') and full_response.tool_calls:
+        tool_calls_str = json.dumps([{
+            "id": call.id,
+            "type": call.type,
+            "function": {
+                "name": call.function.name,
+                "arguments": call.function.arguments
+            }
+        } for call in full_response.tool_calls], ensure_ascii=False)
+        blog_file.write(f'<assistant><direct mode>({model_name}): [TOOL CALLS] {tool_calls_str}\n')
+    
+    # 确保返回的内容可以被序列化
+    return_content = {
+        "content": full_response.content if hasattr(full_response, 'content') else None,
+        "tool_calls": [{
+            "id": call.id,
+            "function": {
+                "name": call.function.name,
+                "arguments": call.function.arguments
+            }
+        } for call in full_response.tool_calls] if hasattr(full_response, 'tool_calls') else None
+    }
+    
+    messages.append({"role": "assistant", "content": str(return_content)})
+    return return_content, messages
+    return full_response, messages
 
 def stream_response(clients, messages, blog_file, temperature):
     model_name, client = clients
     stream = client.chat.completions.create(
         model=model_name,
         messages=messages,
-        stream=True,  # 启用流式传输
+        stream=True,
         temperature=temperature
     )
         
@@ -57,20 +80,20 @@ def stream_response(clients, messages, blog_file, temperature):
 def json_response(clients, messages, blog_file):
     model_name, client = clients
     response = client.chat.completions.create(
-        model="deepseek-chat",
+        model=model_name,
         messages=messages,
         response_format={"type": "json_object"}
     )
     full_response = response.choices[0].message.content
     try:
-        json_data = json.loads(full_response)  # 修正：使用json.loads解析字符串
+        json_data = json.loads(full_response)
         blog_file.write(f'<assistant>({model_name}): {json.dumps(json_data, ensure_ascii=False)}\n')
         return json_data
     except json.JSONDecodeError:
         blog_file.write(f'<assistant>({model_name}): [INVALID JSON] {full_response}\n')
         return {"error": "Invalid JSON response"}
 
-def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='utf-8'), user_input="", tools=[], tool_result=[], temperature=0.3, mode=0):
+def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='utf-8'), user_input="", tools=None, tool_results=None, temperature=0.3, mode=0):
     """
     发送讯息
     clients: 模型，结构为(model_name, client)
@@ -84,13 +107,13 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
     """
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     blog_file.write("\n" + current_time + ":\n")
-    if not tool_result:
+    if not tool_results:
         blog_file.write("<user> " + user_input + '\n')
         messages.append({"role": "user", "content": user_input})
     else:
-        blog_file.write("<tool> " + tool_result + '\n')
-        for tool_r in tool_result:
-            messages.append({"role": "tool", "tool_call_id": tool_r[0], "content": tool_r[1]})
+        blog_file.write("<tool> " + str(tool_results) + '\n')
+        for tool_r in tool_results:
+            messages.append({"role": "tool", "tool_call_id": tool_r["tool_call_id"], "content": tool_r["content"]})
         
     if mode == 0:
         response = json_response(clients, messages, blog_file)
