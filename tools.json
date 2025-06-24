@@ -17,6 +17,24 @@
           ]
         }
       }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_xiaoce_fun_title",
+        "description": "Retrieve the title of the webpage at https://xiaoce.fun",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "The URL of the webpage to retrieve the title from, defaults to https://xiaoce.fun",
+              "default": "https://xiaoce.fun"
+            }
+          },
+          "required": []
+        }
+      }
     }
   ]
 }

@@ -121,7 +121,6 @@ def execute_math_calculator(expression: str) -> str:
             messages=message_initial("你是一个任务分析器"),
             mode=0
         )
-        print(f"分析结果: {response}")
         return response.get("need_new_tool", True)
 
     def _generate_tool(self, task: str) -> dict:
@@ -208,13 +207,14 @@ def execute_math_calculator(expression: str) -> str:
             tools=list(self.tools.values()),
             mode=1
         )
-        
+        response["role"] = "assistant"
         # 处理工具调用
-        if hasattr(response, 'tool_calls'):
+        if 'tool_calls' in response:
             tool_results = []
-            for call in response.tool_calls:
-                tool_name = call.function.name
-                args = json.loads(call.function.arguments)
+            print(response['tool_calls'])
+            for call in response['tool_calls']:
+                tool_name = call['function']['name']
+                args = json.loads(call['function']['arguments'])
                 
                 if tool_name in self.tool_implementations:
                     result = self.tool_implementations[tool_name](**args)
@@ -222,10 +222,10 @@ def execute_math_calculator(expression: str) -> str:
                     result = f"⚠️ 工具{tool_name}未实现"
                 
                 tool_results.append({
-                    "tool_call_id": call.id,
+                    "tool_call_id": call['id'],
                     "content": str(result)
                 })
-            
+            print(tool_results)
             # 发送工具结果
             final_response, _ = send_message(
                 clients=("deepseek-chat", self.llm),
@@ -236,4 +236,4 @@ def execute_math_calculator(expression: str) -> str:
             )
             return final_response.content
         
-        return response.content if hasattr(response, 'content') else str(response)
+        return response['content'] if 'content' in response else str(response)
