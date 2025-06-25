@@ -5,6 +5,7 @@ from typing import Dict, List, Callable
 from openai import OpenAI
 from agent import send_message, message_initial
 import re
+import copy
 
 class ManagerAgent:
     def __init__(self, llm_client: OpenAI):
@@ -56,10 +57,6 @@ class ManagerAgent:
                 # 清理代码中的Markdown标记和多余空格
                 clean_code = self._clean_code(code)
 
-                # 确保必要的导入语句
-                if "import requests" not in clean_code and "fetch_webpage_title" in tool_name:
-                    clean_code = "import requests\nfrom bs4 import BeautifulSoup\nfrom urllib.parse import urlparse\n" + clean_code
-
                 # 动态创建模块
                 spec = importlib.util.spec_from_loader(tool_name, loader=None)
                 module = importlib.util.module_from_spec(spec)
@@ -70,14 +67,14 @@ class ManagerAgent:
                 if hasattr(module, func_name):
                     implementations[tool_name] = getattr(module, func_name)
                 else:
-                    print(f"⚠️ 工具{tool_name}缺少执行函数{func_name}")
+                    print(f"工具{tool_name}缺少执行函数{func_name}")
             except Exception as e:
-                print(f"⚠️ 加载工具{tool_name}失败: {str(e)}")
-                print(f"问题代码:\n{clean_code}...")  # 打印有问题代码的前200个字符
+                print(f"加载工具{tool_name}失败: {str(e)}")
+                print(f"问题代码:\n{clean_code}...")
         return implementations
 
     def _init_default_tools(self) -> Dict[str, dict]:
-        """初始化默认工具定义"""
+        """初始化默认工具定义（仅数学计算工具）"""
         default_tools = {
             "math_calculator": {
                 "type": "function",
@@ -87,7 +84,10 @@ class ManagerAgent:
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "expression": {"type": "string"}
+                            "expression": {
+                                "type": "string",
+                                "description": "要计算的数学表达式"
+                            }
                         },
                         "required": ["expression"]
                     }
@@ -98,18 +98,37 @@ class ManagerAgent:
         return default_tools
     
     def _init_default_codes(self) -> Dict[str, str]:
-        """初始化默认工具代码"""
+        """初始化默认工具代码（仅数学计算工具）"""
         default_codes = {
             "math_calculator": """\
-def execute_math_calculator(expression: str) -> str:
-    try:
-        allowed_chars = set('0123456789+-*/(). ')
-        if not all(c in allowed_chars for c in expression):
-            return "❌ 表达式包含非法字符"
-        return str(eval(expression))
-    except Exception as e:
-        return f"❌ 计算错误: {str(e)}"
-"""
+    def execute_math_calculator(params):
+        import re
+        
+        try:
+            # 参数验证
+            expression = params.get('expression', '').strip()
+            if not expression:
+                return "错误：请输入数学表达式"
+                
+            # 安全验证（只允许基本数学运算符和数字）
+            if not re.match(r'^[\d+\-*/(). ]+$', expression):
+                return "错误：表达式包含非法字符"
+                
+            # 计算前安全检查
+            if any(cmd in expression.lower() for cmd in ['import', 'exec', 'eval', 'open']):
+                return "错误：表达式包含不安全操作"
+                
+            # 执行计算
+            result = eval(expression)
+            return f"计算结果: {result}"
+            
+        except ZeroDivisionError:
+            return "错误：除数不能为零"
+        except SyntaxError:
+            return "错误：无效的数学表达式"
+        except Exception as e:
+            return f"计算错误: {str(e)}"
+    """
         }
         self._save_codes(default_codes)
         return default_codes
@@ -124,12 +143,22 @@ def execute_math_calculator(expression: str) -> str:
         with open(self.code_registry, 'w', encoding='utf-8') as f:
             json.dump(codes, f, indent=2, ensure_ascii=False)
 
-    def process_task(self, task: str, init_messages=[]) -> str:
+    def process_task(self, task: str, init_messages=None) -> str:
         """处理任务主流程"""
+        if init_messages is None:
+            init_messages = message_initial("""你是一个智能助手，能够通过工具调用获取信息。当用户请求需要工具完成的任务时严格遵守：
+1. 你已经调用了合适工具获取信息，messages中ChatCompletionMessage就是使用工具的记录
+2. 你已经借助了工具返回的结果完成任务，messages中'role' = 'tool'的'content'内容就是工具返回的结果
+3. 不要声明自己无法完成任务，应当结合工具返回的结果做答
+4. 直接返回工具返回的信息，如无必要不得自行推断
+""")
+        else:
+            init_messages = copy.deepcopy(init_messages)
+            
         need_new_tool = self._analyze_task(task)
         
         if need_new_tool:
-            print(f"🛠️ 需要新工具处理: {task}")
+            print(f"需要新工具处理: {task}")
             tool_def = self._generate_tool(task)
             tool_code = self._generate_tool_code(tool_def)
             self._register_tool(tool_def, tool_code)
@@ -192,8 +221,8 @@ def execute_math_calculator(expression: str) -> str:
         1. 函数名为execute_{tool_name}
         2. 在函数def的内部使用import语句而非外部
         3. 完善的错误处理
-        4. 返回字符串结果
-        5. 在涉及中文内容时谨慎地处理字符编码问题
+        4. 输入参数应为字典，表示某个参数key输入的字符串为value，并返回字符串结果
+        5. 在涉及非英文内容时谨慎地处理字符编码问题
         
         只需返回代码，无需解释："""
         
@@ -227,7 +256,7 @@ def execute_math_calculator(expression: str) -> str:
         # 重新加载实现
         self.tool_implementations = self._load_implementations()
         
-        print(f"✅ 注册成功: {tool_name}")
+        print(f"注册成功: {tool_name}")
 
     def _execute_task(self, task: str, init_messages) -> str:
         """执行任务"""
@@ -248,13 +277,21 @@ def execute_math_calculator(expression: str) -> str:
                 args = json.loads(call.function.arguments)
                 
                 if tool_name in self.tool_implementations:
-                    result = self.tool_implementations[tool_name](args)
+                    try:
+                        # 执行工具并确保结果为字符串
+                        result = self.tool_implementations[tool_name](args)
+                        if not isinstance(result, str):
+                            result = str(result)
+                        # 显式编码为UTF-8，再解码为字符串，确保中文等字符正确处理
+                        result = result.encode('utf-8').decode('utf-8')
+                    except Exception as e:
+                        result = f"工具执行错误: {str(e)}"
                 else:
-                    result = f"⚠️ 工具{tool_name}未实现"
+                    result = f"工具{tool_name}未实现"
                 
                 tool_results.append({
                     "tool_call_id": call.id,
-                    "content": str(result)
+                    "content": result  # 已经是正确处理编码后的字符串
                 })
             
             # 发送工具结果

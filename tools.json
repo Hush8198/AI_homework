@@ -9,7 +9,8 @@
           "type": "object",
           "properties": {
             "expression": {
-              "type": "string"
+              "type": "string",
+              "description": "要计算的数学表达式"
             }
           },
           "required": [
@@ -22,13 +23,13 @@
       "type": "function",
       "function": {
         "name": "get_page_title",
-        "description": "Retrieves the title of a webpage given its URL.",
+        "description": "Retrieve the title of a webpage given its URL",
         "parameters": {
           "type": "object",
           "properties": {
             "url": {
               "type": "string",
-              "description": "The URL of the webpage to retrieve the title from."
+              "description": "The URL of the webpage to retrieve the title from"
             }
           },
           "required": [
@@ -41,17 +42,17 @@
       "type": "function",
       "function": {
         "name": "create_file",
-        "description": "Creates a file named '2.txt' in the current directory.",
+        "description": "在当前目录下创建一个名为2.txt的文件",
         "parameters": {
           "type": "object",
           "properties": {
-            "input_param": {
+            "file_name": {
               "type": "string",
-              "description": "The name of the file to be created, which is '2.txt' in this case."
+              "description": "要创建的文件名称，例如2.txt"
             }
           },
           "required": [
-            "input_param"
+            "file_name"
           ]
         }
       }

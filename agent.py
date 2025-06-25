@@ -88,8 +88,8 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
     user_input: 发送的信息
     tools: 工具合集
     tool_result: 工具返回的结果
-    temperature=0.7: 温度
-    mode=0,1,2,3: mode=0 json输出, mode=1 直接输出, mode=2 流式输出, mode=3 function结果输入
+    temperature=0.3: 温度
+    mode=0,1,2: mode=0 json输出, mode=1 直接输出, mode=2 流式输出
     """
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     blog_file.write("\n" + current_time + ":\n")
@@ -105,7 +105,7 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
         response = json_response(clients, messages, blog_file)
     elif mode == 1:
         response, messages = direct_response(clients, messages, blog_file, tools, temperature)
-    elif mode == 2:
+    else:
         response, messages = stream_response(clients, messages, blog_file, temperature)
     return response, messages
 
