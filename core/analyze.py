@@ -7,35 +7,43 @@ from core.manager_agent import ManagerAgent
 from core.safe import task_checker
 
 class TaskAnalyzer:
-    def __init__(self, llm_client: OpenAI, progress_panel=None):
+    def __init__(self, llm_client: OpenAI, log_callback=None):
         """初始化分析器，复用agent.py的日志系统"""
         self.llm = llm_client
         self.blog_file = open("blogs/blog.txt", "a", encoding="utf-8")
         self.task_history = []  # 新增：记录任务执行历史
-        self.progress_panel = progress_panel
+        self.log_callback = log_callback
         self.trail = 2
 
-    def analyze_and_execute(self, complex_task: str) -> str:
+    def _log_step(self, message: str):
+        """复用agent.py的日志格式"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.blog_file.write(f"\n{timestamp}:\n<system> {message}\n")
+
+    def analyze_and_execute(self, complex_task: str, log_callback=None) -> str:
         """
         分步执行：动态规划下一步 -> 执行子任务 -> 汇总结果
         """
+        def log(message):
+            if log_callback:
+                log_callback(message)
+            self._log_step(message)
         # 初始化任务
-        self._log_step(f"开始进行任务安全检查")
+        log(f"开始进行任务安全检查")
         safe, err = self.safe_check(complex_task)
         if not safe:
+            log(err)
             return err
         else:
-            self._log_step(f"开始处理复杂任务: {complex_task}")
+            log(f"开始处理复杂任务: {complex_task}")
             results = []
-            manager = ManagerAgent(self.llm, self.progress_panel)
+            manager = ManagerAgent(self.llm, log)
             messages = message_initial("系统正在处理复杂任务")
         
         # 动态规划执行流程
         while True:
-            if self.progress_panel:
-                self.progress_panel.add_log_message(f"开始规划下一步任务: {complex_task}")
+            log(f"开始规划下一步任务: {complex_task}")
             # 步骤1：规划下一步任务
-            self._log_step("规划下一步任务")
 
             trail = self.trail
             next_task = self._plan_next_step(complex_task, messages)
@@ -44,24 +52,17 @@ class TaskAnalyzer:
                 trail -= 1
             if next_task is None:
                 err = f"连续预测下一步骤{self.trail}次返回空，终止该任务"
-                self._log_step(err)
-                if self.progress_panel:
-                    self.progress_panel.add_log_message(err)
+                log(err)
                 return False, err
             
             if next_task["step_num"] == "-1":  # 终止条件
-                self._log_step("检测到最终步骤，准备结束任务")
-                if self.progress_panel:
-                    self.progress_panel.add_log_message(f"准备结束")
+                log(f"准备结束")
                 break
                 
             # 步骤2：执行子任务
-            if self.progress_panel:
-                self.progress_panel.add_log_message(f"预测步骤为：{next_task['description'][:50]}")
+            log(f"预测步骤为：{next_task['description'][:50]}")
             self.safe_check(f"{next_task['description'][:50]}")
-            self._log_step(f"执行步骤 {next_task['step_num']}: {next_task['description'][:50]}...")
-            if self.progress_panel:
-                self.progress_panel.add_log_message(f"开始执行该步骤")
+            log(f"执行步骤 {next_task['step_num']}: {next_task['description'][:50]}...")
             result, new_messages = self._execute_subtask(next_task["description"], manager, messages)
             
             # 更新上下文
@@ -74,15 +75,10 @@ class TaskAnalyzer:
             self.task_history.append(next_task["description"])  # 记录历史
 
         # 步骤3：汇总结果
-        self._log_step("开始汇总最终结果")
+        log("开始汇总最终结果")
         final_result = self._summarize_results(complex_task, results)
         self.blog_file.write(f"<system> 任务完成，结果长度: {len(final_result)}\n")
         return final_result
-
-    def _log_step(self, message: str):
-        """复用agent.py的日志格式"""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.blog_file.write(f"\n{timestamp}:\n<system> {message}\n")
 
     def _plan_next_step(self, task: str, messages: List[Dict]) -> Dict:
         """智能规划下一步任务，考虑历史记录和当前上下文"""
@@ -150,9 +146,6 @@ class TaskAnalyzer:
         return response
 
     def safe_check(self, task):
-        self._log_step(f"开始进行任务安全检查")
-        if self.progress_panel:
-            self.progress_panel.add_log_message("对该任务进行安全检查")
         safe_response = task_checker(self.llm, task)
         trail = self.trail
         while safe_response is None and trail:
@@ -160,9 +153,6 @@ class TaskAnalyzer:
             trail -= 1
         if safe_response is None:
             err = f"安全检查连续{self.trail}次返回空，终止该任务"
-            self._log_step(err)
-            if self.progress_panel:
-                self.progress_panel.add_log_message(err)
             return False, err
         if safe_response["safety"] == "Unsafe":
             self._log_step(str(safe_response))
@@ -170,7 +160,7 @@ class TaskAnalyzer:
             if self.progress_panel:
                 self.progress_panel.add_log_message(err)
             return False, err
-        return True, ""
+        return True, "通过安全检查"
         
     
     def runner(complex_task):

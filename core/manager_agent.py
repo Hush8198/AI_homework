@@ -9,18 +9,18 @@ import copy
 from web_agent.web_agent import WebAgent, WebTools
 
 class ManagerAgent:
-    def __init__(self, llm_client: OpenAI, progress_panel=None):
+    def __init__(self, llm_client: OpenAI, log=None):
         self.llm = llm_client
         self.web_agent = WebAgent()  # 新增Web Agent实例
         self.tool_registry = "tools.json"  # 仍然保留工具定义的JSON文件
         self.tools_dir = "tools"  # 工具代码存放目录
         self.tools = self._load_tools()
         self.tool_implementations = self._load_implementations()
-        self.progress_panel = progress_panel
+        self.log = log
         
         # 确保工具目录存在
         os.makedirs(self.tools_dir, exist_ok=True)
-    
+
     def _clean_code(self, code: str) -> str:
         """清理代码中的Markdown标记、多余空格和转义字符"""
         # 移除代码块标记
@@ -101,22 +101,19 @@ class ManagerAgent:
         need_new_tool = self._analyze_task(task)
         
         if need_new_tool == "Yes":
-            if self.progress_panel:
-                self.progress_panel.add_log_message(f"该任务需要新工具，分析生成工具格式")
+            self.log(f"该任务需要新工具，分析生成工具格式")
             tool_def = self._generate_tool(task)
-            if self.progress_panel:
-                self.progress_panel.add_log_message(f"该任务需要工具{tool_def["function"]["name"]}:{tool_def["function"]["description"]}")
+
+            self.log(f"该任务需要工具{tool_def["function"]["name"]}:{tool_def["function"]["description"]}")
             tool_code = self._generate_tool_code(tool_def)
-            if self.progress_panel:
-                self.progress_panel.add_log_message(f"已生成工具，正在注册工具")
+
+            self.log(f"已生成工具，正在注册工具")
             self._register_tool(tool_def, tool_code)
         else:
-            if self.progress_panel:
-                self.progress_panel.add_log_message(f"该任务无需新工具")
+            self.log(f"该任务无需新工具")
         
         response, messages =  self._execute_task(task, init_messages, need_new_tool=='self')
-        if self.progress_panel:
-            self.progress_panel.add_log_message(f"该步大模型输出：{response}")
+        self.log(f"该步大模型输出：{response}")
         return response, messages
 
     def _analyze_task(self, task: str) -> bool:
@@ -208,8 +205,7 @@ class ManagerAgent:
         # 重新加载实现
         self.tool_implementations = self._load_implementations()
         
-        if self.progress_panel:
-            self.progress_panel.add_log_message(f"成功注册工具，可前往tools文件夹查看")
+        self.log(f"成功注册工具，可前往tools文件夹查看")
 
     def _execute_task(self, task: str, init_messages, self_solve) -> str:
         """执行任务"""
@@ -237,8 +233,7 @@ class ManagerAgent:
                 args = json.loads(call.function.arguments)
                 
                 if tool_name in self.tool_implementations:
-                    if self.progress_panel:
-                        self.progress_panel.add_log_message(f"执行工具：{tool_name}")
+                    self.log(f"执行工具：{tool_name}")
                     try:
                         # 执行工具并确保结果为字符串
                         result = self.tool_implementations[tool_name](args)
@@ -246,15 +241,12 @@ class ManagerAgent:
                             result = str(result)
                         # 显式编码为UTF-8，再解码为字符串，确保中文等字符正确处理
                         result = result.encode('utf-8').decode('utf-8')
-                        if self.progress_panel:
-                            self.progress_panel.add_log_message(f"成功执行，输出结果：{result}")
+                        self.log(f"成功执行，输出结果：{result}")
                     except Exception as e:
-                        if self.progress_panel:
-                            self.progress_panel.add_log_message(f"工具执行错误：{str(e)}")
+                        self.log(f"工具执行错误：{str(e)}")
                         result = f"工具执行错误: {str(e)}"
                 else:
-                    if self.progress_panel:
-                        self.progress_panel.add_log_message(f"工具未实现")
+                    self.log(f"工具未实现")
                     result = f"工具{tool_name}未实现"
                 
                 tool_results.append({

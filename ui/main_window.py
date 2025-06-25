@@ -1,6 +1,9 @@
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
-                            QHBoxLayout, QSplitter, QStatusBar)
+                            QHBoxLayout, QSplitter, QStatusBar, QMessageBox)
 from PyQt5.QtCore import Qt
+from core.task_thread import TaskThread
+from core.analyze import TaskAnalyzer
+from ui.components.log_panel import LogPanel  # 新增导入
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -8,15 +11,16 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Alita - AI任务管理系统")
         self.setGeometry(100, 100, 1200, 800)
         
-        # 1. 先初始化所有UI组件
+        # 初始化UI
         self._init_ui_components()
         
-        # 2. 然后连接信号
-        self._connect_signals()
-        
-        # 3. 其他初始化
-        self.analyzer = None
+        # 初始化任务系统
         self.llm_client = None  # 会在main.py中设置
+        self.task_thread = None
+        self.analyzer = None
+        
+        # 连接信号
+        self._connect_signals()
 
     def _init_ui_components(self):
         """初始化所有UI组件"""
@@ -29,17 +33,34 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Horizontal)
         
         # 左侧面板(任务输入和历史)
-        self.left_panel = QWidget()
-        self.left_layout = QVBoxLayout(self.left_panel)
-        self.left_layout.setContentsMargins(5, 5, 5, 5)
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(5, 5, 5, 5)
         
-        # 右侧面板(执行和结果)
-        self.right_panel = QWidget()
-        self.right_layout = QVBoxLayout(self.right_panel)
-        self.right_layout.setContentsMargins(5, 5, 5, 5)
+        # 右侧面板(日志和结果)
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(5, 5, 5, 5)
         
-        splitter.addWidget(self.left_panel)
-        splitter.addWidget(self.right_panel)
+        # 初始化组件
+        from ui.components.task_input import TaskInput
+        from ui.components.history_panel import HistoryPanel
+        from ui.components.result_viewer import ResultViewer
+        
+        self.task_input = TaskInput()
+        self.history_panel = HistoryPanel()
+        self.log_panel = LogPanel()  # 替换原来的progress_panel
+        self.result_viewer = ResultViewer()
+        
+        # 添加到布局
+        left_layout.addWidget(self.task_input)
+        left_layout.addWidget(self.history_panel)
+        
+        right_layout.addWidget(self.log_panel)
+        right_layout.addWidget(self.result_viewer)
+        
+        splitter.addWidget(left_panel)
+        splitter.addWidget(right_panel)
         splitter.setSizes([400, 800])
         
         main_layout.addWidget(splitter)
@@ -47,64 +68,51 @@ class MainWindow(QMainWindow):
         # 状态栏
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        
-        # 初始化具体组件
-        self._init_left_panel()
-        self._init_right_panel()
-
-    def _init_left_panel(self):
-        """初始化左侧面板"""
-        from .components.task_input import TaskInput
-        from .components.history_panel import HistoryPanel
-        
-        self.task_input = TaskInput()  # 先创建task_input
-        self.history_panel = HistoryPanel()
-        
-        self.left_layout.addWidget(self.task_input, 1)
-        self.left_layout.addWidget(self.history_panel, 2)
-
-    def _init_right_panel(self):
-        """初始化右侧面板"""
-        from .components.progress_panel import ProgressPanel
-        from .components.result_viewer import ResultViewer
-        
-        self.progress_panel = ProgressPanel()
-        self.result_viewer = ResultViewer()
-        
-        self.right_layout.addWidget(self.progress_panel, 1)
-        self.right_layout.addWidget(self.result_viewer, 2)
 
     def _connect_signals(self):
-        """连接所有信号和槽"""
+        """连接信号和槽"""
         self.task_input.execute_signal.connect(self.execute_task)
 
-    def execute_task(self, task_description):
-        """执行任务的槽函数"""
-        from core.analyze import TaskAnalyzer
-        from ui.components.progress_panel import ProgressPanel
+    def execute_task(self, task_description: str):
+        """执行任务"""
+        if self.task_thread and self.task_thread.isRunning():
+            self.log_panel.add_log("[WARN] 请等待当前任务完成")
+            return
+            
+        # 初始化分析器
         if not self.analyzer:
-            # 将progress_panel传递给Agent
-            self.analyzer = TaskAnalyzer(
-                self.llm_client, 
-                progress_panel=self.progress_panel
-            )
-        try:
-            # 更新UI状态
-            self.status_bar.showMessage("任务执行中...")
-            
-            # 初始化任务分析器
-            analyzer = TaskAnalyzer(self.llm_client)  # 需要提前初始化llm_client
-            
-            # 执行任务
-            result = analyzer.analyze_and_execute(task_description)
-            
-            # 显示结果
-            self.result_viewer.result_browser.setMarkdown(result)
-            self.status_bar.showMessage("任务完成", 3000)
-            
-            # 添加到历史记录
-            self.history_panel.add_history(task_description)
-            
-        except Exception as e:
-            self.status_bar.showMessage(f"错误: {str(e)}", 5000)
-            self.result_viewer.result_browser.setPlainText(f"执行出错:\n{str(e)}")
+            self.analyzer = TaskAnalyzer(self.llm_client)
+        
+        # 准备执行
+        self.log_panel.clear_logs()
+        self.log_panel.add_log(f"[INFO] 开始执行任务: {task_description}")
+        self.task_input.setEnabled(False)
+        
+        # 创建并启动线程
+        self.task_thread = TaskThread(
+            task_func=self.analyzer.analyze_and_execute,
+            task_args=(task_description,)
+        )
+        
+        # 连接信号
+        self.task_thread.log_received.connect(self.log_panel.add_log)
+        self.task_thread.task_completed.connect(self._on_task_completed)
+        self.task_thread.start()
+
+    def _on_task_completed(self, result: str):
+        """任务完成处理"""
+        if result:
+            self.log_panel.add_log("[INFO] 任务执行成功")
+            self.result_viewer.set_result(result)
+        else:
+            self.log_panel.add_log("[ERROR] 任务未完成")
+        
+        self.task_input.setEnabled(True)
+        self.task_thread = None
+
+    def closeEvent(self, event):
+        """窗口关闭时确保线程停止"""
+        if self.task_thread and self.task_thread.isRunning():
+            self.task_thread.quit()
+            self.task_thread.wait()
+        event.accept()
