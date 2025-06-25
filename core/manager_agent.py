@@ -9,7 +9,7 @@ import copy
 from web_agent.web_agent import WebAgent, WebTools
 
 class ManagerAgent:
-    def __init__(self, llm_client: OpenAI, log=None):
+    def __init__(self, llm_client: OpenAI, log=None, trails=2):
         self.llm = llm_client
         self.web_agent = WebAgent()  # 新增Web Agent实例
         self.tool_registry = "tools.json"  # 仍然保留工具定义的JSON文件
@@ -17,6 +17,7 @@ class ManagerAgent:
         self.tools = self._load_tools()
         self.tool_implementations = self._load_implementations()
         self.log = log
+        self.trails = trails
         
         # 确保工具目录存在
         os.makedirs(self.tools_dir, exist_ok=True)
@@ -88,15 +89,18 @@ class ManagerAgent:
 
     def process_task(self, task: str, init_messages=None) -> str:
         """处理任务主流程"""
-        if init_messages is None:
-            init_messages = message_initial("""你是一个智能助手，能够通过工具调用获取信息。当用户请求需要工具完成的任务时严格遵守：
-1. 你已经调用了合适工具获取信息，messages中ChatCompletionMessage就是使用工具的记录
-2. 你已经借助了工具返回的结果完成任务，messages中'role' = 'tool'的'content'内容就是工具返回的结果
-3. 不要声明自己无法完成任务，应当结合工具返回的结果做答
-4. 直接返回工具返回的信息，如无必要不得自行推断
+        system_messages = message_initial("""你是一个智能助手，已经通过function_calling的方法从用户端python工具调用获取了信息，
+你的任务是总结之前的对话内容和信息与工作，而不是完成用户的任务：
+1. 你的总结应尽量简短，最好是只返回前一步任务和Function Calling的结果，例如："加法计算结果：12"，或"成功获取信息，为："（信息过长可省略）
+2. 你已经获取了足够的信息，请细致检查历史记录进行总结
+3. 请使用中文回答
+4. 如果工具返回乱码，你需要提醒是否是工具在编码上出现了问题，若总是如此，则应当认为工具的返回是正确的
 """)
+        if init_messages is None:
+            init_messages = system_messages
         else:
             init_messages = copy.deepcopy(init_messages)
+            init_messages[0] = system_messages[0]
             
         need_new_tool = self._analyze_task(task)
         
@@ -176,7 +180,7 @@ class ManagerAgent:
         2. 在函数def的内部使用import语句而非外部
         3. 完善的错误处理，同时保证泛化性和当前任务的可完成性
         4. 输入参数应为字典，表示某个参数key输入的字符串为value，并返回字符串结果
-        5. 在涉及非英文内容时谨慎地处理字符编码问题
+        5. 在可能涉及中文内容时一定谨慎地处理字符编码问题
         
         只需返回代码，无需解释："""
         
@@ -186,6 +190,20 @@ class ManagerAgent:
             messages=message_initial("你是一个Python代码生成器"),
             mode=1
         )[0]
+
+        trail = self.trails
+        while response is None and trail:
+            response = send_message(
+                clients=("deepseek-chat", self.llm),
+                user_input=prompt,
+                messages=message_initial("你是一个Python代码生成器"),
+                mode=1,
+                temperature=0.0
+            )[0]
+            trail -= 1
+        if response is None:
+            err = f"function_calling连续{self.trail+1}次返回空，终止该任务"
+            return False, err
         
         # 确保获取的是纯文本内容并清理
         code = response.content if hasattr(response, 'content') else str(response)
@@ -217,6 +235,7 @@ class ManagerAgent:
                 mode=2
             )
         else:
+            trail = self.trails
             response, messages = send_message(
                 clients=("deepseek-chat", self.llm),
                 user_input=task,
@@ -224,6 +243,18 @@ class ManagerAgent:
                 tools=list(self.tools.values()),
                 mode=1
             )
+            while response is None and trail:
+                response, messages = send_message(
+                    clients=("deepseek-chat", self.llm),
+                    user_input=task,
+                    messages=init_messages,
+                    tools=list(self.tools.values()),
+                    mode=1
+                )
+                trail -= 1
+            if response is None:
+                err = f"function_calling连续{self.trail+1}次返回空，终止该任务"
+                return False, err
         
         # 处理工具调用
         if response and hasattr(response, 'tool_calls'):
@@ -259,7 +290,8 @@ class ManagerAgent:
                 clients=("deepseek-chat", self.llm),
                 messages=messages + [response],
                 tool_results=tool_results,
-                mode=2
+                mode=2,
+                temperature=2.0
             )
             return final_response, messages
         

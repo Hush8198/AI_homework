@@ -82,7 +82,7 @@ def json_response(clients, messages, blog_file, temperature):
         blog_file.write(f'<assistant>({model_name}): [INVALID JSON] {full_response}\n')
         return {"error": "Invalid JSON response"}
 
-def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='utf-8'), user_input="", tools=None, tool_results=None, temperature=0.3, mode=0, output=False):
+def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='utf-8'), user_input="", tools=None, tool_results=None, temperature=1.3, mode=0, output=False):
     """
     发送讯息
     clients: 模型，结构为(model_name, client)
@@ -109,6 +109,7 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
         response, messages = direct_response(clients, messages, blog_file, tools, temperature)
     else:
         response, messages = stream_response(clients, messages, blog_file, temperature, output)
+    print(messages)
     return response, messages
 
 def message_initial(prompt):

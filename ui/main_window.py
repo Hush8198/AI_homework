@@ -101,18 +101,14 @@ class MainWindow(QMainWindow):
 
     def _on_task_completed(self, result: str):
         """任务完成处理"""
-        if result:
-            self.log_panel.add_log("[INFO] 任务执行成功")
-            self.result_viewer.set_result(result)
-        else:
-            self.log_panel.add_log("[ERROR] 任务未完成")
-        
+        self.result_viewer.set_result(result)
         self.task_input.setEnabled(True)
+        self.status_bar.showMessage("任务完成", 3000)
         self.task_thread = None
 
-    def closeEvent(self, event):
-        """窗口关闭时确保线程停止"""
-        if self.task_thread and self.task_thread.isRunning():
-            self.task_thread.quit()
-            self.task_thread.wait()
-        event.accept()
+    def _on_task_failed(self, error_msg: str):
+        """任务失败处理"""
+        self.result_viewer.set_error(error_msg)
+        self.task_input.setEnabled(True)
+        self.status_bar.showMessage("任务失败", 5000)
+        self.task_thread = None

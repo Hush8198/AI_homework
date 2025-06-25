@@ -51,7 +51,7 @@ class TaskAnalyzer:
                 next_task = self._plan_next_step(complex_task, messages)
                 trail -= 1
             if next_task is None:
-                err = f"连续预测下一步骤{self.trail}次返回空，终止该任务"
+                err = f"连续预测下一步骤{self.trail+1}次返回空，终止该任务"
                 log(err)
                 return False, err
             
@@ -152,13 +152,11 @@ class TaskAnalyzer:
             safe_response = task_checker(self.llm, task)
             trail -= 1
         if safe_response is None:
-            err = f"安全检查连续{self.trail}次返回空，终止该任务"
+            err = f"安全检查连续{self.trail+1}次返回空，终止该任务"
             return False, err
         if safe_response["safety"] == "Unsafe":
             self._log_step(str(safe_response))
             err = f"任务未能通过安全检查：{safe_response["message"]}"
-            if self.progress_panel:
-                self.progress_panel.add_log_message(err)
             return False, err
         return True, "通过安全检查"
         
