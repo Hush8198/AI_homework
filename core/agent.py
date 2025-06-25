@@ -65,12 +65,13 @@ def stream_response(clients, messages, blog_file, temperature, output):
     messages.append({"role": "assistant", "content": full_response})
     return full_response, messages
 
-def json_response(clients, messages, blog_file):
+def json_response(clients, messages, blog_file, temperature):
     model_name, client = clients
     response = client.chat.completions.create(
         model=model_name,
         messages=messages,
-        response_format={"type": "json_object"}
+        response_format={"type": "json_object"},
+        temperature=temperature
     )
     full_response = response.choices[0].message.content
     try:
@@ -106,7 +107,7 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
     print(messages)
     print()
     if mode == 0:
-        response = json_response(clients, messages, blog_file)
+        response = json_response(clients, messages, blog_file, temperature)
     elif mode == 1:
         response, messages = direct_response(clients, messages, blog_file, tools, temperature)
     else:

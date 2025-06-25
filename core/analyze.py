@@ -1,39 +1,67 @@
 from typing import List, Dict, Tuple
 import json
 from openai import OpenAI
-from agent import send_message, message_initial
+from core.agent import send_message, message_initial
 from datetime import datetime
-from manager_agent import ManagerAgent
+from core.manager_agent import ManagerAgent
+from core.safe import task_checker
 
 class TaskAnalyzer:
-    def __init__(self, llm_client: OpenAI):
+    def __init__(self, llm_client: OpenAI, progress_panel=None):
         """初始化分析器，复用agent.py的日志系统"""
         self.llm = llm_client
-        self.blog_file = open("blog.txt", "a", encoding="utf-8")
+        self.blog_file = open("blogs/blog.txt", "a", encoding="utf-8")
         self.task_history = []  # 新增：记录任务执行历史
+        self.progress_panel = progress_panel
+        self.trail = 2
 
     def analyze_and_execute(self, complex_task: str) -> str:
         """
         分步执行：动态规划下一步 -> 执行子任务 -> 汇总结果
         """
         # 初始化任务
-        self._log_step(f"开始处理复杂任务: {complex_task}")
-        results = []
-        manager = ManagerAgent(self.llm)
-        messages = message_initial("系统正在处理复杂任务")
+        self._log_step(f"开始进行任务安全检查")
+        safe, err = self.safe_check(complex_task)
+        if not safe:
+            return err
+        else:
+            self._log_step(f"开始处理复杂任务: {complex_task}")
+            results = []
+            manager = ManagerAgent(self.llm, self.progress_panel)
+            messages = message_initial("系统正在处理复杂任务")
         
         # 动态规划执行流程
         while True:
+            if self.progress_panel:
+                self.progress_panel.add_log_message(f"开始规划下一步任务: {complex_task}")
             # 步骤1：规划下一步任务
             self._log_step("规划下一步任务")
+
+            trail = self.trail
             next_task = self._plan_next_step(complex_task, messages)
+            while next_task is None and trail:
+                next_task = self._plan_next_step(complex_task, messages)
+                trail -= 1
+            if next_task is None:
+                err = f"连续预测下一步骤{self.trail}次返回空，终止该任务"
+                self._log_step(err)
+                if self.progress_panel:
+                    self.progress_panel.add_log_message(err)
+                return False, err
             
             if next_task["step_num"] == "-1":  # 终止条件
                 self._log_step("检测到最终步骤，准备结束任务")
+                if self.progress_panel:
+                    self.progress_panel.add_log_message(f"准备结束")
                 break
                 
             # 步骤2：执行子任务
+            if self.progress_panel:
+                self.progress_panel.add_log_message(f"预测步骤为：{next_task['description'][:50]}")
+            self.safe_check(f"{next_task['description'][:50]}")
             self._log_step(f"执行步骤 {next_task['step_num']}: {next_task['description'][:50]}...")
+            if self.progress_panel:
+                self.progress_panel.add_log_message(f"开始执行该步骤")
             result, new_messages = self._execute_subtask(next_task["description"], manager, messages)
             
             # 更新上下文
@@ -62,12 +90,12 @@ class TaskAnalyzer:
         
         当前状态:
         - 主任务: {task}
-        - 已完成步骤: {json.dumps(self.task_history[-3:], ensure_ascii=False) if self.task_history else "无"}
+        - 已完成步骤: {json.dumps(self.task_history, ensure_ascii=False) if self.task_history else "无"}
         - 最新上下文: {messages[-1]['content'][:200] + '...' if messages else "无"}
         
         请分析并返回JSON格式的下一步计划，你需要仔细观察历史消息确保没有遗漏步骤和已完成步骤:
         {{
-            "step_num": "步骤编号（新步骤从1开始，后续递增，-1表示最终步骤）",
+            "step_num": "步骤编号（新步骤从1开始，后续递增，-1表示任务结束）",
             "description": "具体任务描述",
             "rationale": "选择此步骤的理由"
         }}
@@ -121,16 +149,38 @@ class TaskAnalyzer:
         )
         return response
 
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-    import os
+    def safe_check(self, task):
+        self._log_step(f"开始进行任务安全检查")
+        if self.progress_panel:
+            self.progress_panel.add_log_message("对该任务进行安全检查")
+        safe_response = task_checker(self.llm, task)
+        trail = self.trail
+        while safe_response is None and trail:
+            safe_response = task_checker(self.llm, task)
+            trail -= 1
+        if safe_response is None:
+            err = f"安全检查连续{self.trail}次返回空，终止该任务"
+            self._log_step(err)
+            if self.progress_panel:
+                self.progress_panel.add_log_message(err)
+            return False, err
+        if safe_response["safety"] == "Unsafe":
+            self._log_step(str(safe_response))
+            err = f"任务未能通过安全检查：{safe_response["message"]}"
+            if self.progress_panel:
+                self.progress_panel.add_log_message(err)
+            return False, err
+        return True, ""
+        
+    
+    def runner(complex_task):
+        from dotenv import load_dotenv
+        import os
+        load_dotenv()
 
-    load_dotenv()
-    client = OpenAI(
-        api_key=os.getenv("DEEPSEEK_API_KEY"),
-        base_url="https://api.deepseek.com"
-    )
-
-    analyzer = TaskAnalyzer(client)
-    complex_task = input("请输入你的复杂任务：")
-    print("执行结果:", analyzer.analyze_and_execute(complex_task))
+        client = OpenAI(
+            api_key=os.getenv("DEEPSEEK_API_KEY"),
+            base_url="https://api.deepseek.com"
+        )
+        analyzer = TaskAnalyzer(client)
+        print("执行结果:", analyzer.analyze_and_execute(complex_task))

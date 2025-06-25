@@ -1,13 +1,25 @@
-from openai import OpenAI
-from core.manager_agent import ManagerAgent
-import os
-from dotenv import load_dotenv
-from core.agent import message_initial
+import sys
+from PyQt5.QtWidgets import QApplication
+from ui.main_window import MainWindow
 
-client = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
-agent = ManagerAgent(client)
+def main():
+    app = QApplication(sys.argv)
+    
+    # 初始化LLM客户端
+    from openai import OpenAI
+    from dotenv import load_dotenv
+    import os
+    
+    load_dotenv()
+    llm_client = OpenAI(
+        api_key=os.getenv("DEEPSEEK_API_KEY"),
+        base_url="https://api.deepseek.com"
+    )
+    
+    window = MainWindow()
+    window.llm_client = llm_client  # 传递LLM客户端
+    window.show()
+    sys.exit(app.exec_())
 
-# 示例：动态生成工具并执行
-task = "输出 https://xiaoce.fun 最新测试的名称"
-response, _ = agent.process_task(task)
-print(response)
+if __name__ == "__main__":
+    main()

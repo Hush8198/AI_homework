@@ -3,19 +3,20 @@ import os
 import importlib.util
 from typing import Dict, List, Callable
 from openai import OpenAI
-from agent import send_message, message_initial
+from core.agent import send_message, message_initial
 import re
 import copy
 from web_agent.web_agent import WebAgent, WebTools
 
 class ManagerAgent:
-    def __init__(self, llm_client: OpenAI):
+    def __init__(self, llm_client: OpenAI, progress_panel=None):
         self.llm = llm_client
         self.web_agent = WebAgent()  # 新增Web Agent实例
         self.tool_registry = "tools.json"  # 仍然保留工具定义的JSON文件
         self.tools_dir = "tools"  # 工具代码存放目录
         self.tools = self._load_tools()
         self.tool_implementations = self._load_implementations()
+        self.progress_panel = progress_panel
         
         # 确保工具目录存在
         os.makedirs(self.tools_dir, exist_ok=True)
@@ -100,10 +101,14 @@ class ManagerAgent:
         need_new_tool = self._analyze_task(task)
         
         if need_new_tool == "Yes":
-            print(f"需要新工具处理: {task}")
+            if self.progress_panel:
+                self.progress_panel.add_log_message(f"该任务需要新工具")
             tool_def = self._generate_tool(task)
             tool_code = self._generate_tool_code(tool_def)
             self._register_tool(tool_def, tool_code)
+        else:
+            if self.progress_panel:
+                self.progress_panel.add_log_message(f"该任务无需新工具")
         
         return self._execute_task(task, init_messages, need_new_tool=='self')
 
