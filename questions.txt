@@ -1,0 +1,30 @@
+Question 1: 42 - 13 = ?
+Answer 1:  29
+
+Question 2: 67 - 10 = ?
+Answer 2:  57
+
+Question 3: 26 + 27 = ?
+Answer 3:  53
+
+Question 4: 87 - 18 = ?
+Answer 4:  69
+
+Question 5: 10 - 7 = ?
+Answer 5:  3
+
+Question 6: 9 + 20 = ?
+Answer 6:  29
+
+Question 7: 23 + 44 = ?
+Answer 7:  67
+
+Question 8: 19 + 36 = ?
+Answer 8:  55
+
+Question 9: 20 - 11 = ?
+Answer 9:  9
+
+Question 10: 13 + 7 = ?
+Answer 10:  20
+

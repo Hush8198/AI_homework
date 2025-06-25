@@ -3,18 +3,18 @@
     {
       "type": "function",
       "function": {
-        "name": "math_calculator",
-        "description": "计算数学表达式",
+        "name": "calculate_division",
+        "description": "计算给定除法算式的答案",
         "parameters": {
           "type": "object",
           "properties": {
-            "expression": {
+            "division_expression": {
               "type": "string",
-              "description": "要计算的数学表达式"
+              "description": "除法算式，例如 '10/2'"
             }
           },
           "required": [
-            "expression"
+            "division_expression"
           ]
         }
       }
@@ -22,33 +22,33 @@
     {
       "type": "function",
       "function": {
-        "name": "get_page_title",
-        "description": "Retrieves the title of the webpage at the specified URL.",
+        "name": "generate_math_questions",
+        "description": "Generates 10 addition and subtraction math questions with answers within 100 and saves them to 'questions.txt' in the current directory.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "output_file": {
+              "type": "string",
+              "description": "The name of the file to save the generated questions and answers.",
+              "default": "questions.txt"
+            }
+          },
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_bilibili_title",
+        "description": "访问Bilibili网站并获取当前网页的标题",
         "parameters": {
           "type": "object",
           "properties": {
             "url": {
               "type": "string",
-              "description": "The URL of the webpage whose title is to be retrieved."
-            }
-          },
-          "required": [
-            "url"
-          ]
-        }
-      }
-    },
-    {
-      "type": "function",
-      "function": {
-        "name": "create_file",
-        "description": "在当前目录下创建一个名为2.txt的文件",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "file_name": {
-              "type": "string",
-              "description": "要创建的文件的名称，默认为2.txt"
+              "description": "Bilibili的网址，默认为https://www.bilibili.com",
+              "default": "https://www.bilibili.com"
             }
           },
           "required": []

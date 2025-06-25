@@ -40,7 +40,7 @@ def direct_response(clients, messages, blog_file, tools, temperature):
     messages.append({"role": "assistant", "content": full_response.content} if hasattr(full_response, 'content') else full_response)
     return full_response, messages
 
-def stream_response(clients, messages, blog_file, temperature):
+def stream_response(clients, messages, blog_file, temperature, output):
     model_name, client = clients
     stream = client.chat.completions.create(
         model=model_name,
@@ -55,10 +55,12 @@ def stream_response(clients, messages, blog_file, temperature):
         if chunk.choices[0].delta.content:
             word = chunk.choices[0].delta.content
             blog_file.write(word)
-            print(word, end='', flush=True)
+            if output:
+                print(word, end='', flush=True)
             full_response += word
             time.sleep(0.03)
-    print()
+    if output:
+        print()
     blog_file.write("\n")
     messages.append({"role": "assistant", "content": full_response})
     return full_response, messages
@@ -79,7 +81,7 @@ def json_response(clients, messages, blog_file):
         blog_file.write(f'<assistant>({model_name}): [INVALID JSON] {full_response}\n')
         return {"error": "Invalid JSON response"}
 
-def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='utf-8'), user_input="", tools=None, tool_results=None, temperature=0.3, mode=0):
+def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='utf-8'), user_input="", tools=None, tool_results=None, temperature=0.3, mode=0, output=False):
     """
     发送讯息
     clients: 模型，结构为(model_name, client)
@@ -100,12 +102,17 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
         blog_file.write("<tool> " + str(tool_results) + '\n')
         for tool_r in tool_results:
             messages.append({"role": "tool", "tool_call_id": tool_r["tool_call_id"], "content": tool_r["content"]})
+    print('_______________________')
+    print(messages)
+    print()
     if mode == 0:
         response = json_response(clients, messages, blog_file)
     elif mode == 1:
         response, messages = direct_response(clients, messages, blog_file, tools, temperature)
     else:
-        response, messages = stream_response(clients, messages, blog_file, temperature)
+        response, messages = stream_response(clients, messages, blog_file, temperature, output)
+    print(response)
+    print('_______________________')
     return response, messages
 
 def message_initial(prompt):
