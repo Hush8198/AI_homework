@@ -23,13 +23,13 @@
       "type": "function",
       "function": {
         "name": "get_page_title",
-        "description": "Retrieve the title of a webpage given its URL",
+        "description": "Retrieves the title of the webpage at the specified URL.",
         "parameters": {
           "type": "object",
           "properties": {
             "url": {
               "type": "string",
-              "description": "The URL of the webpage to retrieve the title from"
+              "description": "The URL of the webpage whose title is to be retrieved."
             }
           },
           "required": [
@@ -48,12 +48,10 @@
           "properties": {
             "file_name": {
               "type": "string",
-              "description": "要创建的文件名称，例如2.txt"
+              "description": "要创建的文件的名称，默认为2.txt"
             }
           },
-          "required": [
-            "file_name"
-          ]
+          "required": []
         }
       }
     }

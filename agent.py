@@ -100,7 +100,6 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
         blog_file.write("<tool> " + str(tool_results) + '\n')
         for tool_r in tool_results:
             messages.append({"role": "tool", "tool_call_id": tool_r["tool_call_id"], "content": tool_r["content"]})
-    print(messages)
     if mode == 0:
         response = json_response(clients, messages, blog_file)
     elif mode == 1:
