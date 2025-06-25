@@ -3,18 +3,18 @@
     {
       "type": "function",
       "function": {
-        "name": "calculate_division",
-        "description": "计算给定除法算式的答案",
+        "name": "read_questions_file",
+        "description": "Opens the questions.txt file and reads its content.",
         "parameters": {
           "type": "object",
           "properties": {
-            "division_expression": {
+            "file_path": {
               "type": "string",
-              "description": "除法算式，例如 '10/2'"
+              "description": "The path to the questions.txt file."
             }
           },
           "required": [
-            "division_expression"
+            "file_path"
           ]
         }
       }
@@ -22,36 +22,38 @@
     {
       "type": "function",
       "function": {
-        "name": "generate_math_questions",
-        "description": "Generates 10 addition and subtraction math questions with answers within 100 and saves them to 'questions.txt' in the current directory.",
+        "name": "summarize_math_questions",
+        "description": "Summarizes mathematical questions and their answers from a specified file.",
         "parameters": {
           "type": "object",
           "properties": {
-            "output_file": {
+            "file_path": {
               "type": "string",
-              "description": "The name of the file to save the generated questions and answers.",
-              "default": "questions.txt"
+              "description": "The path to the file containing the mathematical questions and answers."
             }
           },
-          "required": []
+          "required": [
+            "file_path"
+          ]
         }
       }
     },
     {
       "type": "function",
       "function": {
-        "name": "get_bilibili_title",
-        "description": "访问Bilibili网站并获取当前网页的标题",
+        "name": "delete_file",
+        "description": "Deletes the specified file from the system.",
         "parameters": {
           "type": "object",
           "properties": {
-            "url": {
+            "file_path": {
               "type": "string",
-              "description": "Bilibili的网址，默认为https://www.bilibili.com",
-              "default": "https://www.bilibili.com"
+              "description": "The path of the file to be deleted."
             }
           },
-          "required": []
+          "required": [
+            "file_path"
+          ]
         }
       }
     }

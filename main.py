@@ -1,8 +1,8 @@
 from openai import OpenAI
-from manager_agent import ManagerAgent
+from core.manager_agent import ManagerAgent
 import os
 from dotenv import load_dotenv
-from agent import message_initial
+from core.agent import message_initial
 
 client = OpenAI(api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com")
 agent = ManagerAgent(client)

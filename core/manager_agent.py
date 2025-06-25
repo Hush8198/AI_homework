@@ -110,7 +110,7 @@ class ManagerAgent:
     def _analyze_task(self, task: str) -> bool:
         """分析任务是否需要新工具"""
         prompt = f"""
-        分析任务是否需要新工具(现有工具: {list(self.tools.keys())})。
+        分析任务是否需要新工具(现有工具: {self.tools})。
         如果你自己可以完成任务或回答问题，无需任何工具或用户操作，need_new_tool字段返回"self"
         如果需要新工具或代码完成，need_new_tool字段返回"Yes"
         如果自己无法完成任务但现有工具或函数可以完成，need_new_tool字段返回"No"
@@ -217,7 +217,7 @@ class ManagerAgent:
             )
         
         # 处理工具调用
-        if hasattr(response, 'tool_calls'):
+        if response and hasattr(response, 'tool_calls'):
             tool_results = []
             for call in response.tool_calls:
                 tool_name = call.function.name
