@@ -21,18 +21,38 @@
     {
       "type": "function",
       "function": {
-        "name": "get_xiaoce_fun_title",
-        "description": "Retrieve the title of the webpage at https://xiaoce.fun",
+        "name": "get_page_title",
+        "description": "Retrieves the title of a webpage given its URL.",
         "parameters": {
           "type": "object",
           "properties": {
             "url": {
               "type": "string",
-              "description": "The URL of the webpage to retrieve the title from, defaults to https://xiaoce.fun",
-              "default": "https://xiaoce.fun"
+              "description": "The URL of the webpage to retrieve the title from."
             }
           },
-          "required": []
+          "required": [
+            "url"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "create_file",
+        "description": "Creates a file named '2.txt' in the current directory.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "input_param": {
+              "type": "string",
+              "description": "The name of the file to be created, which is '2.txt' in this case."
+            }
+          },
+          "required": [
+            "input_param"
+          ]
         }
       }
     }

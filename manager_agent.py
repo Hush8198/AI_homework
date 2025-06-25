@@ -4,6 +4,7 @@ import importlib.util
 from typing import Dict, List, Callable
 from openai import OpenAI
 from agent import send_message, message_initial
+import re
 
 class ManagerAgent:
     def __init__(self, llm_client: OpenAI):
@@ -13,6 +14,22 @@ class ManagerAgent:
         self.tools = self._load_tools()
         self.codes = self._load_codes()
         self.tool_implementations = self._load_implementations()
+    
+    def _clean_code(self, code: str) -> str:
+        """清理代码中的Markdown标记、多余空格和转义字符"""
+        # 移除代码块标记
+        code = re.sub(r'```(python)?', '', code)
+        # 移除前后空白
+        code = code.strip()
+        # 确保函数定义正确
+        if not code.startswith('def '):
+            # 尝试提取第一个函数定义
+            match = re.search(r'def\s+\w+\(.*?\)\s*:', code)
+            if match:
+                code = code[match.start():]
+        # 替换转义字符
+        code = code.encode('utf-8').decode('unicode_escape')
+        return code
 
     def _load_tools(self) -> Dict[str, dict]:
         """加载工具定义"""
@@ -36,16 +53,27 @@ class ManagerAgent:
         implementations = {}
         for tool_name, code in self.codes.items():
             try:
+                # 清理代码中的Markdown标记和多余空格
+                clean_code = self._clean_code(code)
+
+                # 确保必要的导入语句
+                if "import requests" not in clean_code and "fetch_webpage_title" in tool_name:
+                    clean_code = "import requests\nfrom bs4 import BeautifulSoup\nfrom urllib.parse import urlparse\n" + clean_code
+
                 # 动态创建模块
                 spec = importlib.util.spec_from_loader(tool_name, loader=None)
                 module = importlib.util.module_from_spec(spec)
-                exec(code, module.__dict__)
-                
+                exec(clean_code, module.__dict__)
+
                 # 获取执行函数
-                if hasattr(module, f"execute_{tool_name}"):
-                    implementations[tool_name] = getattr(module, f"execute_{tool_name}")
+                func_name = f"execute_{tool_name}"
+                if hasattr(module, func_name):
+                    implementations[tool_name] = getattr(module, func_name)
+                else:
+                    print(f"⚠️ 工具{tool_name}缺少执行函数{func_name}")
             except Exception as e:
                 print(f"⚠️ 加载工具{tool_name}失败: {str(e)}")
+                print(f"问题代码:\n{clean_code}...")  # 打印有问题代码的前200个字符
         return implementations
 
     def _init_default_tools(self) -> Dict[str, dict]:
@@ -96,7 +124,7 @@ def execute_math_calculator(expression: str) -> str:
         with open(self.code_registry, 'w', encoding='utf-8') as f:
             json.dump(codes, f, indent=2, ensure_ascii=False)
 
-    def process_task(self, task: str) -> str:
+    def process_task(self, task: str, init_messages=[]) -> str:
         """处理任务主流程"""
         need_new_tool = self._analyze_task(task)
         
@@ -106,7 +134,7 @@ def execute_math_calculator(expression: str) -> str:
             tool_code = self._generate_tool_code(tool_def)
             self._register_tool(tool_def, tool_code)
         
-        return self._execute_task(task)
+        return self._execute_task(task, init_messages)
 
     def _analyze_task(self, task: str) -> bool:
         """分析任务是否需要新工具"""
@@ -160,22 +188,25 @@ def execute_math_calculator(expression: str) -> str:
         功能描述: {tool_def["function"]["description"]}
         输入参数: {json.dumps(tool_def["function"]["parameters"], ensure_ascii=False)}
         
-        代码要求：
+        严格遵守以下代码要求：
         1. 函数名为execute_{tool_name}
-        2. 包含必要的import语句
+        2. 在函数def的内部使用import语句而非外部
         3. 完善的错误处理
         4. 返回字符串结果
+        5. 在涉及中文内容时谨慎地处理字符编码问题
         
         只需返回代码，无需解释："""
         
-        response, _ = send_message(
+        response = send_message(
             clients=("deepseek-chat", self.llm),
             user_input=prompt,
             messages=message_initial("你是一个Python代码生成器"),
             mode=1
-        )
-        # 确保获取的是纯文本内容
-        return response.content if hasattr(response, 'content') else str(response)
+        )[0]
+        
+        # 确保获取的是纯文本内容并清理
+        code = response.content if hasattr(response, 'content') else str(response)
+        return self._clean_code(code)
 
     def _register_tool(self, tool_def: dict, tool_code: str):
         """注册新工具"""
@@ -198,42 +229,41 @@ def execute_math_calculator(expression: str) -> str:
         
         print(f"✅ 注册成功: {tool_name}")
 
-    def _execute_task(self, task: str) -> str:
+    def _execute_task(self, task: str, init_messages) -> str:
         """执行任务"""
         response, messages = send_message(
             clients=("deepseek-chat", self.llm),
             user_input=task,
-            messages=[],
+            messages=init_messages,
             tools=list(self.tools.values()),
             mode=1
         )
-        response["role"] = "assistant"
+        
         # 处理工具调用
-        if 'tool_calls' in response:
+
+        if hasattr(response, 'tool_calls'):
             tool_results = []
-            print(response['tool_calls'])
-            for call in response['tool_calls']:
-                tool_name = call['function']['name']
-                args = json.loads(call['function']['arguments'])
+            for call in response.tool_calls:
+                tool_name = call.function.name
+                args = json.loads(call.function.arguments)
                 
                 if tool_name in self.tool_implementations:
-                    result = self.tool_implementations[tool_name](**args)
+                    result = self.tool_implementations[tool_name](args)
                 else:
                     result = f"⚠️ 工具{tool_name}未实现"
                 
                 tool_results.append({
-                    "tool_call_id": call['id'],
+                    "tool_call_id": call.id,
                     "content": str(result)
                 })
-            print(tool_results)
+            
             # 发送工具结果
-            final_response, _ = send_message(
+            final_response, messages = send_message(
                 clients=("deepseek-chat", self.llm),
                 messages=messages + [response],
                 tool_results=tool_results,
-                tools=list(self.tools.values()),
                 mode=1
             )
-            return final_response.content
+            return final_response.content, messages
         
-        return response['content'] if 'content' in response else str(response)
+        return response.content if hasattr(response, 'content') else str(response)

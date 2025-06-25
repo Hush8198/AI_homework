@@ -37,25 +37,8 @@ def direct_response(clients, messages, blog_file, tools, temperature):
             }
         } for call in full_response.tool_calls], ensure_ascii=False)
         blog_file.write(f'<assistant><direct mode>({model_name}): [TOOL CALLS] {tool_calls_str}\n')
-    
-    # 确保返回的内容可以被序列化
-    tool_calls_data = []
-    if hasattr(full_response, 'tool_calls') and full_response.tool_calls:
-        tool_calls_data = [{
-            "id": call.id,
-            "function": {
-                "name": call.function.name,
-                "arguments": call.function.arguments
-            }
-        } for call in full_response.tool_calls]
-    
-    return_content = {
-        "content": full_response.content if hasattr(full_response, 'content') else None,
-        "tool_calls": tool_calls_data
-    }
-    
-    messages.append({"role": "assistant", "content": str(return_content)})
-    return return_content, messages
+    messages.append({"role": "assistant", "content": full_response.content} if hasattr(full_response, 'content') else full_response)
+    return full_response, messages
 
 def stream_response(clients, messages, blog_file, temperature):
     model_name, client = clients
@@ -106,7 +89,7 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
     tools: 工具合集
     tool_result: 工具返回的结果
     temperature=0.7: 温度
-    mode=0,1,2: mode=0 json输出, mode=1 直接输出, mode=2 流式输出
+    mode=0,1,2,3: mode=0 json输出, mode=1 直接输出, mode=2 流式输出, mode=3 function结果输入
     """
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     blog_file.write("\n" + current_time + ":\n")
@@ -117,12 +100,12 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
         blog_file.write("<tool> " + str(tool_results) + '\n')
         for tool_r in tool_results:
             messages.append({"role": "tool", "tool_call_id": tool_r["tool_call_id"], "content": tool_r["content"]})
-        
+    print(messages)
     if mode == 0:
         response = json_response(clients, messages, blog_file)
     elif mode == 1:
         response, messages = direct_response(clients, messages, blog_file, tools, temperature)
-    else:
+    elif mode == 2:
         response, messages = stream_response(clients, messages, blog_file, temperature)
     return response, messages
 
