@@ -102,15 +102,22 @@ class ManagerAgent:
         
         if need_new_tool == "Yes":
             if self.progress_panel:
-                self.progress_panel.add_log_message(f"该任务需要新工具")
+                self.progress_panel.add_log_message(f"该任务需要新工具，分析生成工具格式")
             tool_def = self._generate_tool(task)
+            if self.progress_panel:
+                self.progress_panel.add_log_message(f"该任务需要工具{tool_def["function"]["name"]}:{tool_def["function"]["description"]}")
             tool_code = self._generate_tool_code(tool_def)
+            if self.progress_panel:
+                self.progress_panel.add_log_message(f"已生成工具，正在注册工具")
             self._register_tool(tool_def, tool_code)
         else:
             if self.progress_panel:
                 self.progress_panel.add_log_message(f"该任务无需新工具")
         
-        return self._execute_task(task, init_messages, need_new_tool=='self')
+        response, messages =  self._execute_task(task, init_messages, need_new_tool=='self')
+        if self.progress_panel:
+            self.progress_panel.add_log_message(f"该步大模型输出：{response}")
+        return response, messages
 
     def _analyze_task(self, task: str) -> bool:
         """分析任务是否需要新工具"""
@@ -201,7 +208,8 @@ class ManagerAgent:
         # 重新加载实现
         self.tool_implementations = self._load_implementations()
         
-        print(f"注册成功: {tool_name}")
+        if self.progress_panel:
+            self.progress_panel.add_log_message(f"成功注册工具，可前往tools文件夹查看")
 
     def _execute_task(self, task: str, init_messages, self_solve) -> str:
         """执行任务"""
@@ -229,6 +237,8 @@ class ManagerAgent:
                 args = json.loads(call.function.arguments)
                 
                 if tool_name in self.tool_implementations:
+                    if self.progress_panel:
+                        self.progress_panel.add_log_message(f"执行工具：{tool_name}")
                     try:
                         # 执行工具并确保结果为字符串
                         result = self.tool_implementations[tool_name](args)
@@ -236,9 +246,15 @@ class ManagerAgent:
                             result = str(result)
                         # 显式编码为UTF-8，再解码为字符串，确保中文等字符正确处理
                         result = result.encode('utf-8').decode('utf-8')
+                        if self.progress_panel:
+                            self.progress_panel.add_log_message(f"成功执行，输出结果：{result}")
                     except Exception as e:
+                        if self.progress_panel:
+                            self.progress_panel.add_log_message(f"工具执行错误：{str(e)}")
                         result = f"工具执行错误: {str(e)}"
                 else:
+                    if self.progress_panel:
+                        self.progress_panel.add_log_message(f"工具未实现")
                     result = f"工具{tool_name}未实现"
                 
                 tool_results.append({
