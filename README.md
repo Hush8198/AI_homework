@@ -26,4 +26,4 @@ python main.py
 
 Structrue.png:
 
-![structure](D:\HSH\University\大二\大二下\人工智能基础\AI基础2025\大作业\Final\structure.png)
+![structure](structure.png)
