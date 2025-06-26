@@ -88,7 +88,7 @@ class ManagerAgent:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(code)
 
-    def process_task(self, task: str, init_messages=None) -> str:
+    def process_task(self, task: str,complex_task: str, init_messages=None) -> str:
         """处理任务主流程"""
         system_messages = message_initial("""你是一个智能助手，已经通过function_calling的方法从用户端python工具调用获取了信息，
 你的任务是总结之前的对话内容和信息与工作，而不是完成用户的任务：
@@ -108,7 +108,7 @@ class ManagerAgent:
         
         if need_new_tool == "Yes":
             self.log(f"[TOOL NEED] 该任务需要新工具，分析生成工具格式")
-            tool_def = self._generate_tool(task)
+            tool_def = self._generate_tool(task, complex_task)
 
             self.log(f"[TOOL GENERATE] 开始生成工具{tool_def["function"]["name"]}:{tool_def["function"]["description"]}")
             tool_code = self._generate_tool_code(tool_def)
@@ -130,6 +130,10 @@ class ManagerAgent:
         如果你可以生成用户所需内容（你只能生成文本内容），无需任何工具或用户操作，则need_new_tool字段返回"self"
         如果需要新工具或代码完成，need_new_tool字段返回"Yes"
         如果自己无法完成任务但现有工具或函数可以完成，need_new_tool字段返回"No"
+
+        非常重要：只有当前任务为纯生成文本任务时才能使用self字段！涉及其它系统操作应检查工具能否完成，任何一步不能完成都应该选择"Yes"
+        注意：获取部分信息时，请仔细核对需要用户端信息、网络信息或生成内容。对于网络信息，如果你可以给出也可以使用。
+
         返回JSON格式: {{"need_new_tool": str, "reason": str}}
         任务: {task}"""
         
@@ -141,10 +145,10 @@ class ManagerAgent:
         )
         return response["need_new_tool"]
 
-    def _generate_tool(self, task: str) -> dict:
+    def _generate_tool(self, task: str, complex_task: str) -> dict:
         """生成新工具定义"""
         prompt = f"""
-        请为以下任务创建工具定义(JSON格式):
+        请为以下任务创建工具定义，同时输出还应该能够更方便的完成后续任务(JSON格式):
         {{
             "type": "function",
             "function": {{
@@ -159,7 +163,9 @@ class ManagerAgent:
                 }}
             }}
         }}
-        任务: {task}"""
+        任务: {task}
+        后续任务: {complex_task}
+"""
         
         response, _ = send_message(
             clients=("deepseek-chat", self.llm),
@@ -179,11 +185,12 @@ class ManagerAgent:
         输入参数: {json.dumps(tool_def["function"]["parameters"], ensure_ascii=False)}
         
         严格遵守以下代码要求：
-        1. 函数名为execute_{tool_name}
-        2. 生成程序第一行必须是def指定函数名，所有需要的库应当在给定def函数内部import
-        3. 完善的错误处理，同时保证泛化性和当前任务的可完成性
-        4. 输入参数应为字典，表示某个参数key输入的字符串为value，并返回字符串结果
-        5. 在可能涉及中文内容时一定谨慎地处理字符编码问题
+        1. 非常重要：函数名为execute_{tool_name}
+        2. 非常重要：程序中所有需要的库应当在给定def函数内部导入import，不要在函数定义外部导入，否则会失效
+        3. 完善的错误处理
+        4. 保证一定的泛化性和当前任务的可完成性
+        5. 输入参数应为字典，表示某个参数key输入的字符串为value，并返回字符串结果
+        6. 在可能涉及中文内容时一定谨慎地处理字符编码问题
         
         只需返回代码，无需解释："""
         
@@ -292,7 +299,7 @@ class ManagerAgent:
                     })
                 
                 # 发送工具结果
-                self.log(f"[STEP RESULT]步骤分析：")
+                self.log(f"[STEP RESULT]步骤分析")
                 final_response, messages = send_message(
                     clients=("deepseek-chat", self.llm),
                     messages=messages + [response],
@@ -301,10 +308,12 @@ class ManagerAgent:
                     stream_handler=self.stream_handler,
                     temperature=2.0
                 )
+                if not self.stream_handler:
+                    self.log(final_response.content)
                 return final_response, messages
             
         except TypeError:
-            self.log(f"[STEP RESULT]步骤分析：{response.content}")
+            self.log(f"[STEP RESULT]{response.content}")
             pass
         
         return response.content if hasattr(response, 'content') else str(response), messages

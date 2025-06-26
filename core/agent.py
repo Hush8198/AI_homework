@@ -78,7 +78,7 @@ def stream_response_past(clients, messages, blog_file, temperature, output):
     return full_response, messages
 
 def stream_response(clients, messages, stream_handler, blog_file):
-    """处理流式响应"""
+    """完全实时的流式响应处理"""
     model_name, client = clients
     stream = client.chat.completions.create(
         model=model_name,
@@ -87,17 +87,19 @@ def stream_response(clients, messages, stream_handler, blog_file):
     )
     
     full_response = ""
+    blog_file.write(f"<assistant><stream mode>({model_name}): ")
+    
     for chunk in stream:
-        if chunk.choices[0].delta.content:
+        if chunk.choices[0].delta and chunk.choices[0].delta.content:
             chunk_text = chunk.choices[0].delta.content
             full_response += chunk_text
-            stream_handler.stream_received.emit(chunk_text)  # 实时发射
-            #log_to_file(blog_file, f"流式接收: {chunk_text}")
+            # 关键修改：立即发射原始片段（不等待缓冲）
+            stream_handler.stream_received.emit(chunk_text)
+            blog_file.write(chunk_text)
+            blog_file.flush()  # 确保日志实时写入
+            time.sleep(0.03)
     
-    stream_handler.final_received.emit(full_response)
-    print("----------------")
-    print(full_response)
-    print("----------------")
+    blog_file.write("\n")
     return full_response, messages + [{"role": "assistant", "content": full_response}]
 
 def json_response(clients, messages, blog_file, temperature):
@@ -146,7 +148,10 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
         if not stream_handler:
             raise ValueError("流式模式需要提供stream_handler")
         return stream_response(clients, messages, stream_handler, blog_file)
+    print("message:---------------------------")
     print(messages)
+    print("response:-------------------------------")
+    print(response)
     return response, messages
 
 def message_initial(prompt):

@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
-                            QHBoxLayout, QSplitter, QStatusBar, QMessageBox)
+                            QHBoxLayout, QSplitter, QStatusBar, QMessageBox, QApplication)
 from PyQt5.QtCore import Qt
 from core.task_thread import TaskThread
 from core.analyze import TaskAnalyzer
@@ -86,7 +86,11 @@ class MainWindow(QMainWindow):
             
         # 初始化分析器
         if not self.analyzer:
-            self.analyzer = TaskAnalyzer(self.llm_client, log_callback=self.log_panel.add_log)
+                self.analyzer = TaskAnalyzer(
+                    self.llm_client, 
+                    log_callback=self.log_panel.add_log,
+                    stream_handler=self.stream_handler
+                )
         
         # 准备执行
         self.log_panel.clear_logs()
@@ -106,13 +110,14 @@ class MainWindow(QMainWindow):
         self.task_thread.start()
 
     def _handle_stream_chunk(self, chunk):
-        """实时处理流式片段"""
-        self.log_panel.add_log(f"生成中: {chunk}")
-        self.result_viewer.append(chunk)  # 实时追加到结果窗口
-
+        """流式片段只显示在结果视图"""
+        self.result_viewer.append(chunk)
+        # 可选：自动滚动到底部
+        QApplication.processEvents()  # 确保UI及时更新
+    
     def _handle_final_result(self, result):
-        """处理最终结果"""
-        self.result_viewer.set_result(result)  # 完整格式化显示
+        """最终结果格式化显示"""
+        self.result_viewer.set_result(result)
         self.log_panel.add_log("[INFO] 生成完成")
 
     def _on_task_completed(self, result: str):

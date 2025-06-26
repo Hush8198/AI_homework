@@ -64,7 +64,7 @@ class TaskAnalyzer:
             log(f"[CHECK] 开始进行子任务安全检查")
             self.safe_check(f"{next_task['description'][:50]}")
             log(f"执行步骤 {next_task['step_num']}: {next_task['description'][:50]}...")
-            result, new_messages = self._execute_subtask(next_task["description"], manager, messages)
+            result, new_messages = self._execute_subtask(next_task["description"], complex_task, manager, messages)
             
             # 更新上下文
             messages += new_messages
@@ -90,8 +90,8 @@ class TaskAnalyzer:
         
         当前状态:
         - 主任务: {task}
-        - 已完成步骤: {json.dumps(self.task_history, ensure_ascii=False) if self.task_history else "无"}
-        - 最新上下文: {messages[-1]['content'][:200] + '...' if messages else "无"}
+        - 已下达步骤: {json.dumps(self.task_history, ensure_ascii=False) if self.task_history else "无"}
+        - 最新上下文: {str(messages[-3:-1]) + '...' if messages else "无"}
         
         请分析并返回JSON格式的下一步计划，你需要仔细观察历史消息确保没有遗漏步骤和已完成步骤:
         {{
@@ -101,10 +101,13 @@ class TaskAnalyzer:
         }}
         
         要求:
-        1. 必须基于已有进展规划后续步骤
-        2. 如果是数据依赖步骤，确保前置数据已准备
-        3. 步骤描述要具体可执行
-        4. 当所有必要步骤完成后返回step_num=-1
+        1. 你的下一步任务将直接交给LLM工作，请确保它足够明确且能够使用Python工具执行，避免不必要或无意义的步骤
+        2. 强调未完成的行动，已完成的行动需弱化避免误判，例如获得的信息记为已获得的或直接将信息给出提供给LLM
+        2. 尽量理解用户需求，如果需求不明确可以直接将step_num设置为-1
+        3. 如果一些子任务无法完成，应当选择其他方式。如果过于复杂如Python不可能实现，也可直接将step_num设置为-1
+        4. 如果是数据依赖步骤，确保前置数据已准备
+        5. 需要获取信息时，请明确需要用户端信息、网络信息或生成内容
+        6. 只有所有必要步骤完成后返回step_num=-1，你必须仔细检查最新上下文观察是否真的完成了所有已下达步骤
         
         示例（数据收集任务）:
         输入: 主任务"收集A公司竞品分析报告"
@@ -118,14 +121,15 @@ class TaskAnalyzer:
         response, _ = send_message(
             clients=("deepseek-chat", self.llm),
             user_input=prompt,
-            messages=message_initial("你是高级任务规划专家，擅长分解复杂任务并保持上下文连贯"),
+            messages=message_initial("你是高级任务规划专家，擅长分解复杂任务并保持上下文连贯") + messages,
             mode=0  # JSON模式
         )
         return response
 
-    def _execute_subtask(self, subtask: str, manager: ManagerAgent, messages: List[Dict]):
+    def _execute_subtask(self, subtask: str,complex_task: str, manager: ManagerAgent, messages: List[Dict]):
         """执行子任务并返回结果和更新后的消息"""
-        return manager.process_task(subtask, messages)
+        manager.stream_handler = self.stream_handler
+        return manager.process_task(subtask, complex_task, messages)
 
     def _summarize_results(self, original_task: str, results: List[Dict]) -> str:
         """汇总结果并生成最终报告"""
@@ -136,7 +140,7 @@ class TaskAnalyzer:
         {json.dumps(results, ensure_ascii=False, indent=2)}
         
         要求:
-        1. 如果任务要求输出格式，按照任务要求
+        1. 如果任务要求输出，按照任务要求直接输出，无需其它内容
         2. 如果任务是执行任务，依次给出执行结果、过程和评价
         3. 使用Markdown形式输出
         4. 如果是其他类型任务，可自由发挥，但尽量简短"""

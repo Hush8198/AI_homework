@@ -1,4 +1,5 @@
-from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QTextBrowser
+from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QTextBrowser, QApplication
+import time
 
 class ResultViewer(QGroupBox):
     def __init__(self):
@@ -25,9 +26,23 @@ class ResultViewer(QGroupBox):
         self.result_browser.clear()
     
     def append(self, text):
-        """流式追加内容"""
+        """真正的逐词追加实现"""
         cursor = self.result_browser.textCursor()
         cursor.movePosition(cursor.End)
-        cursor.insertText(text)
-        self.result_browser.setTextCursor(cursor)
+        
+        # 针对流式输出的特殊处理
+        if len(text) == 1:  # 单字符
+            cursor.insertText(text)
+            # 中文等宽字符特殊处理
+            if ord(text) > 255:  
+                self.result_browser.setTextCursor(cursor)
+                QApplication.processEvents()
+        else:  # 多字符（可能来自非流式调用）
+            for char in text:  # 模拟逐字输出
+                cursor.insertText(char)
+                cursor.movePosition(cursor.End)
+                self.result_browser.setTextCursor(cursor)
+                QApplication.processEvents()
+                time.sleep(0.01)  # 控制输出速度
+        
         self.result_browser.ensureCursorVisible()
