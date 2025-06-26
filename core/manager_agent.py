@@ -6,12 +6,10 @@ from openai import OpenAI
 from core.agent import send_message, message_initial
 import re
 import copy
-from web_agent.web_agent import WebAgent, WebTools
 
 class ManagerAgent:
     def __init__(self, llm_client: OpenAI, log=None, trails=2, stream_handler=None):
         self.llm = llm_client
-        self.web_agent = WebAgent()  # 新增Web Agent实例
         self.tool_registry = "tools.json"  # 仍然保留工具定义的JSON文件
         self.tools_dir = "tools"  # 工具代码存放目录
         self.tools = self._load_tools()
