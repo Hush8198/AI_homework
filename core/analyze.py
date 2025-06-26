@@ -7,42 +7,42 @@ from core.manager_agent import ManagerAgent
 from core.safe import task_checker
 
 class TaskAnalyzer:
-    def __init__(self, llm_client: OpenAI, log_callback=None):
+    def __init__(self, llm_client: OpenAI, log_callback=None, stream_handler=None):
         """初始化分析器，复用agent.py的日志系统"""
         self.llm = llm_client
         self.blog_file = open("blogs/blog.txt", "a", encoding="utf-8")
         self.task_history = []  # 新增：记录任务执行历史
         self.log_callback = log_callback
         self.trail = 2
+        self.stream_handler = stream_handler
 
     def _log_step(self, message: str):
         """复用agent.py的日志格式"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.blog_file.write(f"\n{timestamp}:\n<system> {message}\n")
 
-    def analyze_and_execute(self, complex_task: str, log_callback=None) -> str:
-        """
-        分步执行：动态规划下一步 -> 执行子任务 -> 汇总结果
-        """
+    def analyze_and_execute(self, complex_task: str, log_callback=None, stream_handler=None):
+        """分步执行：动态规划下一步 -> 执行子任务 -> 汇总结果"""
         def log(message):
             if log_callback:
                 log_callback(message)
             self._log_step(message)
+        
         # 初始化任务
-        log(f"开始进行任务安全检查")
+        log(f"[CHECK] 开始进行任务安全检查")
         safe, err = self.safe_check(complex_task)
         if not safe:
             log(err)
             return err
         else:
-            log(f"开始处理复杂任务: {complex_task}")
+            log(f"[TASK] 开始处理复杂任务: {complex_task}")
             results = []
-            manager = ManagerAgent(self.llm, log)
+            manager = ManagerAgent(self.llm, log, self.stream_handler or stream_handler)
             messages = message_initial("系统正在处理复杂任务")
         
         # 动态规划执行流程
         while True:
-            log(f"开始规划下一步任务: {complex_task}")
+            log(f"开始规划下一步任务")
             # 步骤1：规划下一步任务
 
             trail = self.trail
@@ -53,14 +53,15 @@ class TaskAnalyzer:
             if next_task is None:
                 err = f"连续预测下一步骤{self.trail+1}次返回空，终止该任务"
                 log(err)
-                return False, err
-            
+                return err
+                
             if next_task["step_num"] == "-1":  # 终止条件
                 log(f"准备结束")
                 break
-                
+                    
             # 步骤2：执行子任务
-            log(f"预测步骤为：{next_task['description'][:50]}")
+            log(f"[NEXT STEP] 预测步骤为：{next_task['description'][:50]}")
+            log(f"[CHECK] 开始进行子任务安全检查")
             self.safe_check(f"{next_task['description'][:50]}")
             log(f"执行步骤 {next_task['step_num']}: {next_task['description'][:50]}...")
             result, new_messages = self._execute_subtask(next_task["description"], manager, messages)
@@ -70,15 +71,18 @@ class TaskAnalyzer:
             results.append({
                 "step": next_task["step_num"],
                 "description": next_task["description"],
-                "result": result
+                "result": result.content if hasattr(result, 'content') else str(result)
             })
             self.task_history.append(next_task["description"])  # 记录历史
 
         # 步骤3：汇总结果
-        log("开始汇总最终结果")
+        log("[CONC] 开始汇总最终结果")
         final_result = self._summarize_results(complex_task, results)
-        self.blog_file.write(f"<system> 任务完成，结果长度: {len(final_result)}\n")
-        return final_result
+        
+        # 正确处理final_result的长度检查
+        result_content = final_result.content if hasattr(final_result, 'content') else str(final_result)
+        self.blog_file.write(f"<system> 任务完成，结果长度: {len(result_content)}\n")
+        return result_content
 
     def _plan_next_step(self, task: str, messages: List[Dict]) -> Dict:
         """智能规划下一步任务，考虑历史记录和当前上下文"""
@@ -132,18 +136,19 @@ class TaskAnalyzer:
         {json.dumps(results, ensure_ascii=False, indent=2)}
         
         要求:
-        1. 结构化呈现关键信息
-        2. 标注重要发现和数据
-        3. 使用Markdown格式
-        4. 包含任务执行评估"""
+        1. 如果任务要求输出格式，按照任务要求
+        2. 如果任务是执行任务，依次给出执行结果、过程和评价
+        3. 使用Markdown形式输出
+        4. 如果是其他类型任务，可自由发挥，但尽量简短"""
         
         response, _ = send_message(
             clients=("deepseek-chat", self.llm),
             user_input=prompt,
             messages=message_initial("你是高级报告生成专家"),
-            mode=2  # 流式输出
+            mode=2 if self.stream_handler else 1,  # 自动切换模式
+            stream_handler=self.stream_handler
         )
-        return response
+        return response.content if hasattr(response, 'content') else str(response)
 
     def safe_check(self, task):
         safe_response = task_checker(self.llm, task)

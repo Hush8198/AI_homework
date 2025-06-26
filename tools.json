@@ -1,0 +1,123 @@
+{
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "validate_image_url",
+        "description": "Validates the effectiveness and accessibility of an image URL.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "image_url": {
+              "type": "string",
+              "description": "The URL of the image to be validated."
+            }
+          },
+          "required": [
+            "image_url"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "download_image_from_url",
+        "description": "Download an image from a specified URL to a specified local path.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "image_url": {
+              "type": "string",
+              "description": "The URL of the image to download."
+            },
+            "save_path": {
+              "type": "string",
+              "description": "The local path where the image will be saved."
+            }
+          },
+          "required": [
+            "image_url",
+            "save_path"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "validate_image_integrity",
+        "description": "Validates the integrity and readability of downloaded images stored in the local path D:/HSH/pic.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "image_path": {
+              "type": "string",
+              "description": "The local path where the images are stored, e.g., 'D:/HSH/pic'."
+            }
+          },
+          "required": [
+            "image_path"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "confirm_or_create_file",
+        "description": "确认指定的文件是否存在，如果不存在则创建该文件",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "file_path": {
+              "type": "string",
+              "description": "文件的完整路径，包括文件名和扩展名"
+            }
+          },
+          "required": [
+            "file_path"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "save_math_problems",
+        "description": "Generates 10 addition and subtraction math problems with answers within 100 and saves them to a specified file path.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "file_path": {
+              "type": "string",
+              "description": "The file path where the math problems and answers will be saved, e.g., 'E:/IIIJJJ/ppp.txt'."
+            }
+          },
+          "required": [
+            "file_path"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "check_path_access",
+        "description": "验证指定路径是否存在以及当前用户是否有写入权限",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "description": "需要验证的路径，例如E:/IIIJJJ/"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      }
+    }
+  ]
+}

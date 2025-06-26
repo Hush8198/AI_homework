@@ -9,7 +9,7 @@ import copy
 from web_agent.web_agent import WebAgent, WebTools
 
 class ManagerAgent:
-    def __init__(self, llm_client: OpenAI, log=None, trails=2):
+    def __init__(self, llm_client: OpenAI, log=None, trails=2, stream_handler=None):
         self.llm = llm_client
         self.web_agent = WebAgent()  # 新增Web Agent实例
         self.tool_registry = "tools.json"  # 仍然保留工具定义的JSON文件
@@ -18,6 +18,7 @@ class ManagerAgent:
         self.tool_implementations = self._load_implementations()
         self.log = log
         self.trails = trails
+        self.stream_handler = stream_handler
         
         # 确保工具目录存在
         os.makedirs(self.tools_dir, exist_ok=True)
@@ -101,30 +102,32 @@ class ManagerAgent:
         else:
             init_messages = copy.deepcopy(init_messages)
             init_messages[0] = system_messages[0]
-            
+
+        self.log(f"[CHECK] 检测该任务是否需要新工具")
         need_new_tool = self._analyze_task(task)
         
         if need_new_tool == "Yes":
-            self.log(f"该任务需要新工具，分析生成工具格式")
+            self.log(f"[TOOL NEED] 该任务需要新工具，分析生成工具格式")
             tool_def = self._generate_tool(task)
 
-            self.log(f"该任务需要工具{tool_def["function"]["name"]}:{tool_def["function"]["description"]}")
+            self.log(f"[TOOL GENERATE] 开始生成工具{tool_def["function"]["name"]}:{tool_def["function"]["description"]}")
             tool_code = self._generate_tool_code(tool_def)
 
-            self.log(f"已生成工具，正在注册工具")
+            self.log(f"[TOOL REGISTER] 已生成工具，正在注册工具")
             self._register_tool(tool_def, tool_code)
         else:
             self.log(f"该任务无需新工具")
         
+        self.log(f"[EXECUTE] 开始执行")
         response, messages =  self._execute_task(task, init_messages, need_new_tool=='self')
-        self.log(f"该步大模型输出：{response}")
+
         return response, messages
 
     def _analyze_task(self, task: str) -> bool:
         """分析任务是否需要新工具"""
         prompt = f"""
         分析任务是否需要新工具(现有工具: {self.tools})。
-        如果你自己可以完成任务或回答问题，无需任何工具或用户操作，need_new_tool字段返回"self"
+        如果你可以生成用户所需内容（你只能生成文本内容），无需任何工具或用户操作，则need_new_tool字段返回"self"
         如果需要新工具或代码完成，need_new_tool字段返回"Yes"
         如果自己无法完成任务但现有工具或函数可以完成，need_new_tool字段返回"No"
         返回JSON格式: {{"need_new_tool": str, "reason": str}}
@@ -177,7 +180,7 @@ class ManagerAgent:
         
         严格遵守以下代码要求：
         1. 函数名为execute_{tool_name}
-        2. 在函数def的内部使用import语句而非外部
+        2. 生成程序第一行必须是def指定函数名，所有需要的库应当在给定def函数内部import
         3. 完善的错误处理，同时保证泛化性和当前任务的可完成性
         4. 输入参数应为字典，表示某个参数key输入的字符串为value，并返回字符串结果
         5. 在可能涉及中文内容时一定谨慎地处理字符编码问题
@@ -227,12 +230,14 @@ class ManagerAgent:
 
     def _execute_task(self, task: str, init_messages, self_solve) -> str:
         """执行任务"""
+
         if self_solve:
             response, messages = send_message(
                 clients=("deepseek-chat", self.llm),
                 user_input=task,
                 messages=message_initial("你是一个智能助手，完成用户给的任务或回答用户问题"),
-                mode=2
+                mode=2 if self.stream_handler else 1,
+                stream_handler=self.stream_handler,
             )
         else:
             trail = self.trails
@@ -257,42 +262,49 @@ class ManagerAgent:
                 return False, err
         
         # 处理工具调用
-        if response and hasattr(response, 'tool_calls'):
-            tool_results = []
-            for call in response.tool_calls:
-                tool_name = call.function.name
-                args = json.loads(call.function.arguments)
+        try:
+            if response and hasattr(response, 'tool_calls'):
+                tool_results = []
+                for call in response.tool_calls:
+                    tool_name = call.function.name
+                    args = json.loads(call.function.arguments)
+                    
+                    if tool_name in self.tool_implementations:
+                        self.log(f"执行工具：{tool_name}")
+                        try:
+                            # 执行工具并确保结果为字符串
+                            result = self.tool_implementations[tool_name](args)
+                            if not isinstance(result, str):
+                                result = str(result)
+                            # 显式编码为UTF-8，再解码为字符串，确保中文等字符正确处理
+                            result = result.encode('utf-8').decode('utf-8')
+                            self.log(f"[TOOL RESULT] 成功执行，输出结果：{result}")
+                        except Exception as e:
+                            self.log(f"工具执行错误：{str(e)}")
+                            result = f"工具执行错误: {str(e)}"
+                    else:
+                        self.log(f"工具未实现")
+                        result = f"工具{tool_name}未实现"
+                    
+                    tool_results.append({
+                        "tool_call_id": call.id,
+                        "content": result  # 已经是正确处理编码后的字符串
+                    })
                 
-                if tool_name in self.tool_implementations:
-                    self.log(f"执行工具：{tool_name}")
-                    try:
-                        # 执行工具并确保结果为字符串
-                        result = self.tool_implementations[tool_name](args)
-                        if not isinstance(result, str):
-                            result = str(result)
-                        # 显式编码为UTF-8，再解码为字符串，确保中文等字符正确处理
-                        result = result.encode('utf-8').decode('utf-8')
-                        self.log(f"成功执行，输出结果：{result}")
-                    except Exception as e:
-                        self.log(f"工具执行错误：{str(e)}")
-                        result = f"工具执行错误: {str(e)}"
-                else:
-                    self.log(f"工具未实现")
-                    result = f"工具{tool_name}未实现"
-                
-                tool_results.append({
-                    "tool_call_id": call.id,
-                    "content": result  # 已经是正确处理编码后的字符串
-                })
+                # 发送工具结果
+                self.log(f"[STEP RESULT]步骤分析：")
+                final_response, messages = send_message(
+                    clients=("deepseek-chat", self.llm),
+                    messages=messages + [response],
+                    tool_results=tool_results,
+                    mode=2 if self.stream_handler else 1,  # 自动切换模式
+                    stream_handler=self.stream_handler,
+                    temperature=2.0
+                )
+                return final_response, messages
             
-            # 发送工具结果
-            final_response, messages = send_message(
-                clients=("deepseek-chat", self.llm),
-                messages=messages + [response],
-                tool_results=tool_results,
-                mode=2,
-                temperature=2.0
-            )
-            return final_response, messages
+        except TypeError:
+            self.log(f"[STEP RESULT]步骤分析：{response.content}")
+            pass
         
         return response.content if hasattr(response, 'content') else str(response), messages

@@ -5,6 +5,17 @@ import json
 import os
 from dotenv import load_dotenv
 
+from PyQt5.QtCore import QObject, pyqtSignal
+import json
+from datetime import datetime
+
+class StreamHandler(QObject):
+    """处理流式输出的信号类"""
+    stream_received = pyqtSignal(str)  # 流式内容信号
+    final_received = pyqtSignal(str)   # 最终结果信号
+
+
+
 def client_maker(model_name="deepseek-chat"):
     load_dotenv()
     client = None
@@ -40,7 +51,7 @@ def direct_response(clients, messages, blog_file, tools, temperature):
     messages.append({"role": "assistant", "content": full_response.content} if hasattr(full_response, 'content') else full_response)
     return full_response, messages
 
-def stream_response(clients, messages, blog_file, temperature, output):
+def stream_response_past(clients, messages, blog_file, temperature, output):
     model_name, client = clients
     stream = client.chat.completions.create(
         model=model_name,
@@ -63,7 +74,31 @@ def stream_response(clients, messages, blog_file, temperature, output):
         print()
     blog_file.write("\n")
     messages.append({"role": "assistant", "content": full_response})
+
     return full_response, messages
+
+def stream_response(clients, messages, stream_handler, blog_file):
+    """处理流式响应"""
+    model_name, client = clients
+    stream = client.chat.completions.create(
+        model=model_name,
+        messages=messages,
+        stream=True
+    )
+    
+    full_response = ""
+    for chunk in stream:
+        if chunk.choices[0].delta.content:
+            chunk_text = chunk.choices[0].delta.content
+            full_response += chunk_text
+            stream_handler.stream_received.emit(chunk_text)  # 实时发射
+            #log_to_file(blog_file, f"流式接收: {chunk_text}")
+    
+    stream_handler.final_received.emit(full_response)
+    print("----------------")
+    print(full_response)
+    print("----------------")
+    return full_response, messages + [{"role": "assistant", "content": full_response}]
 
 def json_response(clients, messages, blog_file, temperature):
     model_name, client = clients
@@ -82,7 +117,7 @@ def json_response(clients, messages, blog_file, temperature):
         blog_file.write(f'<assistant>({model_name}): [INVALID JSON] {full_response}\n')
         return {"error": "Invalid JSON response"}
 
-def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='utf-8'), user_input="", tools=None, tool_results=None, temperature=1.3, mode=0, output=False):
+def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='utf-8'), user_input="", tools=None, tool_results=None, temperature=1.3, mode=0, stream_handler=None):
     """
     发送讯息
     clients: 模型，结构为(model_name, client)
@@ -108,7 +143,9 @@ def send_message(clients, messages, blog_file=open("blog.txt", "a", encoding='ut
     elif mode == 1:
         response, messages = direct_response(clients, messages, blog_file, tools, temperature)
     else:
-        response, messages = stream_response(clients, messages, blog_file, temperature, output)
+        if not stream_handler:
+            raise ValueError("流式模式需要提供stream_handler")
+        return stream_response(clients, messages, stream_handler, blog_file)
     print(messages)
     return response, messages
 

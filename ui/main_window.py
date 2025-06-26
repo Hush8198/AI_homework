@@ -4,11 +4,12 @@ from PyQt5.QtCore import Qt
 from core.task_thread import TaskThread
 from core.analyze import TaskAnalyzer
 from ui.components.log_panel import LogPanel  # 新增导入
+from core.agent import StreamHandler
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Alita - AI任务管理系统")
+        self.setWindowTitle("任务执行系统")
         self.setGeometry(100, 100, 1200, 800)
         
         # 初始化UI
@@ -18,6 +19,10 @@ class MainWindow(QMainWindow):
         self.llm_client = None  # 会在main.py中设置
         self.task_thread = None
         self.analyzer = None
+
+        self.stream_handler = StreamHandler()
+        self.stream_handler.stream_received.connect(self._handle_stream_chunk)
+        self.stream_handler.final_received.connect(self._handle_final_result)
         
         # 连接信号
         self._connect_signals()
@@ -81,23 +86,34 @@ class MainWindow(QMainWindow):
             
         # 初始化分析器
         if not self.analyzer:
-            self.analyzer = TaskAnalyzer(self.llm_client)
+            self.analyzer = TaskAnalyzer(self.llm_client, log_callback=self.log_panel.add_log)
         
         # 准备执行
         self.log_panel.clear_logs()
         self.log_panel.add_log(f"[INFO] 开始执行任务: {task_description}")
         self.task_input.setEnabled(False)
         
-        # 创建并启动线程
+        # 创建并启动线程，传递流式处理器
         self.task_thread = TaskThread(
             task_func=self.analyzer.analyze_and_execute,
-            task_args=(task_description,)
+            task_args=(task_description,),
+            stream_handler=self.stream_handler  # 传递流式处理器
         )
         
         # 连接信号
         self.task_thread.log_received.connect(self.log_panel.add_log)
         self.task_thread.task_completed.connect(self._on_task_completed)
         self.task_thread.start()
+
+    def _handle_stream_chunk(self, chunk):
+        """实时处理流式片段"""
+        self.log_panel.add_log(f"生成中: {chunk}")
+        self.result_viewer.append(chunk)  # 实时追加到结果窗口
+
+    def _handle_final_result(self, result):
+        """处理最终结果"""
+        self.result_viewer.set_result(result)  # 完整格式化显示
+        self.log_panel.add_log("[INFO] 生成完成")
 
     def _on_task_completed(self, result: str):
         """任务完成处理"""

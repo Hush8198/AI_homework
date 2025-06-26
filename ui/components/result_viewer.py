@@ -23,3 +23,11 @@ class ResultViewer(QGroupBox):
     def clear(self):
         """清空结果"""
         self.result_browser.clear()
+    
+    def append(self, text):
+        """流式追加内容"""
+        cursor = self.result_browser.textCursor()
+        cursor.movePosition(cursor.End)
+        cursor.insertText(text)
+        self.result_browser.setTextCursor(cursor)
+        self.result_browser.ensureCursorVisible()
