@@ -125,15 +125,18 @@ class ManagerAgent:
         """分析任务是否需要新工具"""
         prompt = f"""
         分析任务是否需要新工具(现有工具: {self.tools})。
+        任务: {task}。
+        注意：如果你收到的任务包含"重新生成一份代码"之类的，表示所指的现有工具不可用，在此基础上再分析。
         如果你可以生成用户所需内容（你只能生成文本内容），无需任何工具或用户操作，则need_new_tool字段返回"self"
         如果需要新工具或代码完成，need_new_tool字段返回"Yes"
         如果自己无法完成任务但现有工具或函数可以完成，need_new_tool字段返回"No"
 
         非常重要：只有当前任务为纯生成文本任务时才能使用self字段！涉及其它系统操作应检查工具能否完成，任何一步不能完成都应该选择"Yes"
         注意：获取部分信息时，请仔细核对需要用户端信息、网络信息或生成内容。对于网络信息，如果你可以给出也可以使用。
+        
 
         返回JSON格式: {{"need_new_tool": str, "reason": str}}
-        任务: {task}"""
+        """
         
         response, _ = send_message(
             clients=("deepseek-chat", self.llm),
@@ -195,8 +198,9 @@ class ManagerAgent:
         response = send_message(
             clients=("deepseek-chat", self.llm),
             user_input=prompt,
-            messages=message_initial("你是一个Python代码生成器"),
-            mode=1
+            messages=message_initial("你是一个Python函数生成器，函数所需要的库必须在函数内部import"),
+            mode=1,
+            temperature=0
         )[0]
 
         trail = self.trails
@@ -204,7 +208,7 @@ class ManagerAgent:
             response = send_message(
                 clients=("deepseek-chat", self.llm),
                 user_input=prompt,
-                messages=message_initial("你是一个Python代码生成器"),
+                messages=message_initial("你是一个Python函数生成器"),
                 mode=1,
                 temperature=0.0
             )[0]

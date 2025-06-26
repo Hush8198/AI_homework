@@ -14,7 +14,7 @@ class TaskInput(QGroupBox):
         
         self.label = QLabel("输入您的复杂任务:")
         self.text_edit = QTextEdit()
-        self.text_edit.setPlaceholderText("例如: 收集特斯拉2023年财务数据并生成分析报告...")
+        self.text_edit.setPlaceholderText("例如: 随机生成10个正整数存储在E:/example.txt中")
         self.text_edit.setMinimumHeight(100)
         
         self.submit_btn = QPushButton("执行任务")

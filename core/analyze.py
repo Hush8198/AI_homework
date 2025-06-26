@@ -47,11 +47,19 @@ class TaskAnalyzer:
 
             trail = self.trail
             next_task = self._plan_next_step(complex_task, messages)
-            while next_task is None and trail:
+            if next_task:
+                log(f"[NEXT STEP] 预测步骤为：{next_task['description'][:100]}...")
+                log(f"[CHECK] 开始进行子任务安全检查")
+                safe, err = self.safe_check(f"{next_task['description'][:100]}")
+            while (next_task is None or not safe) and trail:
                 next_task = self._plan_next_step(complex_task, messages)
+                if next_task:
+                    log(f"[NEXT STEP] 预测步骤为：{next_task['description'][:100]}...")
+                    log(f"[CHECK] 开始进行子任务安全检查")
+                    safe, err = self.safe_check(f"{next_task['description'][:100]}")
                 trail -= 1
-            if next_task is None:
-                err = f"连续预测下一步骤{self.trail+1}次返回空，终止该任务"
+            if next_task is None or not safe:
+                err = f"连续预测下一步骤{self.trail+1}次返回空或不安全，终止该任务"
                 log(err)
                 return err
                 
@@ -60,9 +68,6 @@ class TaskAnalyzer:
                 break
                     
             # 步骤2：执行子任务
-            log(f"[NEXT STEP] 预测步骤为：{next_task['description'][:50]}")
-            log(f"[CHECK] 开始进行子任务安全检查")
-            self.safe_check(f"{next_task['description'][:50]}")
             log(f"执行步骤 {next_task['step_num']}: {next_task['description'][:50]}...")
             result, new_messages = self._execute_subtask(next_task["description"], complex_task, manager, messages)
             
@@ -105,16 +110,16 @@ class TaskAnalyzer:
         2. 强调未完成的行动，已完成的行动需弱化避免误判，例如获得的信息记为已获得的或直接将信息给出提供给LLM
         2. 尽量理解用户需求，如果需求不明确可以直接将step_num设置为-1
         3. 如果一些子任务无法完成，应当选择其他方式。如果过于复杂如Python不可能实现，也可直接将step_num设置为-1
-        4. 如果是数据依赖步骤，确保前置数据已准备
+        4. 如果你发现代码有问题，请显式写出“重新生成一份代码，...”
         5. 需要获取信息时，请明确需要用户端信息、网络信息或生成内容
         6. 只有所有必要步骤完成后返回step_num=-1，你必须仔细检查最新上下文观察是否真的完成了所有已下达步骤
         
         示例（数据收集任务）:
         输入: 主任务"收集A公司竞品分析报告"
-        已完成: ["收集A公司基本信息", "识别A公司主要竞品"]
+        已完成: ["在网页搜索A公司主页", "根据A公司主页识别A公司主要竞品"]
         应返回: {{
             "step_num": "3",
-            "description": "收集竞品1的市场份额和产品特性数据",
+            "description": "根据A公司主页收集竞品的市场份额和产品特性数据",
             "rationale": "已完成竞品识别，现在需要具体数据"
         }}"""
         
